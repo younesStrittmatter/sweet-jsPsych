@@ -1,0 +1,53 @@
+{
+  "name": "@sweet-jspsych/plugin-trolley-problem",
+  "private": false,
+  "version": "0.0.5",
+  "description": "Show a trolley problem scenario and collect responses",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "exports": {
+    "import": "./dist/index.js",
+    "require": "./dist/index.cjs"
+  },
+  "typings": "dist/index.d.ts",
+  "unpkg": "dist/index.browser.min.js",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "source": "src/index.ts",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "npm test -- --watch",
+    "tsc": "tsc",
+    "build": "rollup --config",
+    "build:watch": "npm run build -- --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+\"https://github.com/younesStrittmatter/sweet-jspsych/",
+    "directory": "plugin/trolley-problem"
+  },
+  "author": {
+    "name": "Younes Strittmatter",
+    "url": "https://github.com/younesStrittmatter"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/younesStrittmatter/sweet-jspsych/issues"
+  },
+  "homepage": "\"https://github.com/younesStrittmatter/sweet-jspsych",
+  "peerDependencies": {
+    "jspsych": ">=7.0.0"
+  },
+  "dependencies": {
+    "figure-lab": "^0.0.8"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-typescript": "^8.0.0",
+    "@rollup/plugin-url": "^8.0.2",
+    "rollup": "^3.0.0",
+    "rollup-plugin-svgr": "^4.0.1"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "packages": [
+    "plugins/*"
+  ],
+  "version": "independent",
+  "command": {
+    "publish": {
+      "access": "public"
+    }
+  }
+}

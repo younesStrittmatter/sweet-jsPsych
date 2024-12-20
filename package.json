@@ -1,0 +1,23 @@
+{
+  "name": "sweet-jspsych",
+  "version": "0.0.3",
+  "private": false,
+  "type": "module",
+  "workspaces": [
+    "plugins/*"
+  ],
+  "scripts": {
+    "build": "lerna run build",
+    "build:watch": "lerna run build --stream -- --watch",
+    "test": "lerna run test",
+    "clean": "lerna clean",
+    "publish": "lerna publish from-package"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "lerna": "^8.1.9",
+    "rollup-plugin-terser": "^7.0.2"
+  },
+  "license": "MIT"
+}
