@@ -2,14 +2,14 @@
 
 ## Overview
 
-{description}
+Show a trolley problem scenario and ask the participant to make a decision.
 
 ## Loading
 
 ### In browser
 
 ```js
-<script src="https://unpkg.com/@jspsych-contrib/{full-name}@1.0.0"></script>
+<script src="https://unpkg.com/@sweet-jspsych/@1.0.0"></script>
 ```
 
 ### Via NPM
