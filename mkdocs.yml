@@ -1,1 +1,22 @@
 site_name: Sweet JsPsych
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: black
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    - scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.indexes
+    - content.code.copy
+    - announce.dismiss
+nav:
+    - Home: index.md
+    - Trolley Problem: trolley-problem

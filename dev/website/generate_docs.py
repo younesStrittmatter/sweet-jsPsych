@@ -47,27 +47,51 @@ def find_examples(root_dir):
     return examples
 
 
-def copy_files_and_generate_index(readmes, output_dir, root_dir):
+def copy_files_and_generate_nav(readmes, output_dir, root_dir):
     """Copy README files to the output directory and generate an index file."""
     os.makedirs(output_dir, exist_ok=True)
-    index_path = os.path.join(output_dir, "index.md")
+    nav = []
 
+    for package_file, rollup_file in zip(find_package_jsons(root_dir), find_rollup_configs(root_dir)):
+        content = create_readme_from_package_json(package_file, rollup_file)
+        relative_dir = os.path.relpath(os.path.dirname(package_file), root_dir)
+        output_path = os.path.join(output_dir, relative_dir, "index.md")
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "w") as f:
+            f.write(content)
+        link_name = relative_dir.replace("_", " ").replace('-', ' ')
+        link_name = " ".join(word.capitalize() for word in link_name.split())
+        nav.append({"name": link_name, "path": relative_dir})
 
-    with open(index_path, "w") as index_file:
-        index_file.write("# Documentation\n\n")
-        for package_file, rollup_file in zip(find_package_jsons(root_dir), find_rollup_configs(root_dir)):
-            content = create_readme_from_package_json(package_file, rollup_file)
-            relative_dir = os.path.relpath(os.path.dirname(package_file), root_dir)
-            output_path = os.path.join(output_dir, relative_dir, "README.md")
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            with open(output_path, "w") as f:
-                f.write(content)
-            link_name = relative_dir.replace("_", " ").replace('-', ' ')
-            link_name = " ".join(word.capitalize() for word in link_name.split())
-            index_file.write(f"- [{link_name}](./{relative_dir}/README.md)\n")
+    return nav
 
-    print(f"Documentation generated in {output_dir}")
+def create_mkdocs_yaml(nav):
+    content = """site_name: Sweet JsPsych
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: black
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
 
+    - scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.indexes
+    - content.code.copy
+    - announce.dismiss
+nav:
+    - Home: index.md
+"""
+    for section in nav:
+        content += f"    - {section['name']}: {section['path']}\n"
+    with open("../../mkdocs.yml", "w") as f:
+        f.write(content)
 
 def extract_rollup_config_with_regex(rollup_config_path):
     """Extract information from rollup.config.mjs using regex."""
@@ -153,7 +177,8 @@ def main():
         return
 
     # Generate the documentation
-    copy_files_and_generate_index(readmes, output_dir, root_dir)
+    nav = copy_files_and_generate_nav(readmes, output_dir, root_dir)
+    create_mkdocs_yaml(nav)
 
 
 if __name__ == "__main__":

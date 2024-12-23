@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <script src="https://unpkg.com/jspsych"></script>
+  <script src="https://unpkg.com/@sweet-jspsych/plugin-trolley-problem"></script>
+  <link rel="stylesheet" href="https://unpkg.com/jspsych@7.0.0/css/jspsych.css">
+</head>
+
+<body></body>
+<script type="module">
+  const jsPsych = initJsPsych({
+    on_finish: function () {
+      jsPsych.data.displayData();
+    }
+  });
+
+  const trial = {
+    type: jsPsychTrolleyProblem,
+    main_track: [{ gender: "male", body_type: "business", skin: "white" }],
+    side_track: [{ gender: 'female', body_type: 'pregnant', skin: 'black'
+    }]
+  };
+
+  const trial_2 = {
+    type: jsPsychTrolleyProblem,
+    main_track: [{ gender: "female", body_type: "casual", skin: "white" }, {gender: "female", body_type: "elderly", skin: "brown"}],
+    side_track: [{ gender: 'female', body_type: 'pregnant', skin: 'black'
+    }]
+  };
+
+  jsPsych.run([trial, trial_2])
+</script>
+
+</html>
