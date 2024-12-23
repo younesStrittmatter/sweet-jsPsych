@@ -4,4 +4,4 @@ A collection of plugins for [jsPsych](https://www.jspsych.org/). These plugins a
 
 ## Author
 
-Younes Strittmatter
+[Younes Strittmatter](https://github.com/younesStrittmatter)
