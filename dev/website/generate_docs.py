@@ -49,6 +49,16 @@ def find_examples(root_dir):
     return examples
 
 
+def find_additional_docs(root_dir):
+    examples = []
+    for dirpath, _, filenames in os.walk(root_dir):
+        if not 'node_modules' in dirpath:
+            if dirpath.endswith("docs"):
+                for file in filenames:
+                    examples.append(os.path.join(dirpath, file))
+    return examples
+
+
 def find_plugin_code(root_dir):
     plugin_code = []
     for dirpath, _, filenames in os.walk(root_dir):
@@ -266,6 +276,14 @@ def add_examples(root_dir):
                 f.write(f"\n\n```html\n{open(path, 'r').read()}\n```")
 
 
+def add_additional_docs(root_dir):
+    for path in find_additional_docs(root_dir):
+        relative_dir = os.path.relpath(os.path.dirname(path), root_dir)
+        output_path = os.path.join("../../docs", relative_dir[:-4], "index.md")
+        with open(output_path, "a") as f:
+            f.write(f"\n\n{open(path, 'r').read()}\n")
+
+
 def main():
     # Define directories
     root_dir = "../../plugins"
@@ -281,6 +299,7 @@ def main():
     # Generate the documentation
     nav = copy_files_and_generate_nav(readmes, output_dir, root_dir)
     create_mkdocs_yaml(nav)
+    add_additional_docs(root_dir)
     add_examples(root_dir)
 
 

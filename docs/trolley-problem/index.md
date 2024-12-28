@@ -45,6 +45,21 @@ import jsPsychTrolleyProblem from '@sweet-jspsych/plugin-trolley-problem';
 jsPsych 7.0.0
 
 
+## Options for Characters
+
+- gender: Male, Female
+- body_type: business, casual, pregnant, elderly
+- skin: white, black, brown, alien
+
+## Contribute Assets
+
+You can contribute assets (characters or scenarios) here:
+
+[Figure Lab](https://github.com/younesStrittmatter/figure-lab)
+
+
+
+
 ## Examples
 
 ```html

@@ -6,7 +6,7 @@ const info = <const>{
     name: "trolley-problem",
     version: '0.0.5',
     parameters: {
-        /** A list of objects that describe the people on the main track. */
+        /** A list of objects that describe the people on the main track. Gender: male, female. Body_type: casual, business, elderly, homeless, bankRobber, pregnant. Skin: black, brown, white, alien.  */
         main_track: {
             type: ParameterType.COMPLEX,
             default: [{gender: "male", body_type: "business", skin: "white"}]
@@ -16,7 +16,7 @@ const info = <const>{
             type: ParameterType.STRING,
             default: [{gender: "male", body_type: "business", skin: "white"}]
         },
-        /** The duration in ms the problem is show. If `null`, the problem is shown indefinitely */
+        /** The duration in ms the problem is show. If `null`, the problem is shown indefinitely. */
         trial_duration: {
             type: ParameterType.INT,
             default: null

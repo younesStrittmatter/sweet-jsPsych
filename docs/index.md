@@ -5,3 +5,19 @@ A collection of plugins for [jsPsych](https://www.jspsych.org/). These plugins a
 ## Author
 
 [Younes Strittmatter](https://github.com/younesStrittmatter)
+
+```html
+## Options for Characters
+
+- gender: Male, Female
+- body_type: business, casual, pregnant, elderly
+- skin: white, black, brown, alien
+
+## Contribute Assets
+
+You can contribute assets (characters or scenarios) here:
+
+[Figure Lab](https://github.com/younesStrittmatter/figure-lab)
+
+
+```
