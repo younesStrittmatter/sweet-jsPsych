@@ -192,7 +192,7 @@ class TrolleyProblemPlugin implements JsPsychPlugin<Info> {
                     `nobody`;
 
             if (trial.show_prompt) {
-                prompt.innerHTML = `You are standing by the railroad tracks when you notice an empty boxcar rolling out of control. It is moving so fast that anyone it hits will die. Ahead on the main track ${mainTrackText_1}. There ${sideTrackText_1} standing on a side track that doesn't rejoin the main track.  If you do nothing, the boxcar will hit ${mainTrackText_2} on the main track, but it will not hit ${sideTrackText_2} the side track. If you flip a switch next to you, it will divert the boxcar to the side track where it will hit ${sideTrackText_2}, and not hit ${mainTrackText_2} on the main track.<br>Click on the left picture to do nothing, or the right picture to flip the switch.`;
+                prompt.innerHTML = `You are standing by the railroad tracks when you notice an empty boxcar rolling out of control. It is moving so fast that anyone it hits will die. Ahead on the main track ${mainTrackText_1}. There ${sideTrackText_1} standing on a side track that doesn't rejoin the main track. If you do nothing, the boxcar will hit ${mainTrackText_2} on the main track, but it will not hit ${sideTrackText_2} the side track. If you flip a switch next to you, it will divert the boxcar to the side track where it will hit ${sideTrackText_2}, and not hit ${mainTrackText_2} on the main track.<br>Click on the left picture to do nothing, or the right picture to flip the switch.`;
             } else {
                 prompt.innerHTML = "Click on the left picture to do nothing, or the right picture to flip the switch.";
             }

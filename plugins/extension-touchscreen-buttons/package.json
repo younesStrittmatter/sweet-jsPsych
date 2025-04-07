@@ -1,0 +1,13 @@
+{
+  "name": "@sweet-jspsych/extension-touchscreen-buttons",
+  "version": "0.0.1",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "dependencies": {
+    "jspsych": "^7.3.0"
+  }
+}
