@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Foraging — Random Non-Overlapping (Default)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="https://unpkg.com/jspsych@7.3.1"></script>
+  <link href="https://unpkg.com/jspsych@7.3.1/css/jspsych.css" rel="stylesheet"/>
+  <style>
+    body { background:#000; color:#fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .frame { max-width:920px; margin:2rem auto; padding:1rem; border-radius:12px; background:#111; }
+    .center { text-align:center; }
+    .hint { opacity:.85; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <h1 class="center">Foraging — Random, Non-Overlapping</h1>
+    <p class="hint center">Defaults: black background, no stars, ends when all targets found.</p>
+  </div>
+
+  <!-- IIFE build from this package -->
+  <script src="../dist/index.browser.min.js"></script>
+  <script>
+    const jsPsych = initJsPsych({
+      on_finish: () => console.log(jsPsych.data.get().values())
+    });
+
+    const svgRect = (fill) => "data:image/svg+xml;utf8," + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+        <rect x="16" y="16" width="224" height="224" rx="32" ry="32" fill="${fill}"/>
+      </svg>`
+    );
+
+    const targets = [
+      { text: "A" , color: "#f00" },
+      { shape: "circle", color: "#f00" },
+      { html: "<strong>★</strong>", color: "#f00" },
+      { src: svgRect("#fff"), color: "#f00" },
+    ];
+
+    const distractors = [
+      { text: "B" , color: "#0f0" },
+      { shape: "square", color: "#0f0" },
+      { html: "<strong>☆</strong>", color: "#0f0" },
+      { src: svgRect("#888888"), color: "#0f0" },
+    ];
+
+    const trial = {
+      type: jsPsychForaging, // or "foraging"
+      targets, distractors,
+
+      // Defaults used:
+      // position_mode: "random" (non-overlapping)
+      // trial_duration: null; end_when_found: true
+      // overlay_pool / rotation_pool: internal defaults
+      // background: #000; text color: #fff
+      // show_star_feedback: false
+
+      // Deterministic layout/sampling:
+      // seed: 42,
+
+      // If you want stars, set to true:
+      show_star_feedback: true,
+    };
+
+    jsPsych.run([trial]);
+  </script>
+</body>
+</html>
