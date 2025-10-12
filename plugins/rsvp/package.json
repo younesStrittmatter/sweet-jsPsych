@@ -1,9 +1,12 @@
 {
   "name": "@sweet-jspsych/plugin-rsvp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "RSVP (center/bilateral/grid) plugin for jsPsych 7.x",
   "type": "module",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
