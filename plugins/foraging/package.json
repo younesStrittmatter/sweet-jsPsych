@@ -1,0 +1,40 @@
+{
+  "name": "@sweet-jspsych/plugin-foraging",
+  "version": "0.2.1",
+  "description": "Generic visual foraging plugin for jsPsych 7.x (targets vs distractors, click-to-collect).",
+  "type": "module",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "unpkg": "dist/index.browser.min.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "sideEffects": false,
+  "peerDependencies": {
+    "jspsych": "^7.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.8",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^12.1.1",
+    "rollup": "^4.22.4",
+    "rollup-plugin-terser": "^7.0.2",
+    "typescript": "^5.6.3"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "clean": "rm -rf dist"
+  },
+  "author": "Younes Strittmatter",
+  "license": "MIT"
+}
