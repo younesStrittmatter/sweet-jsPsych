@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Gabor Array Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+  <!-- jsPsych core + one stock plugin -->
+  <script src="https://unpkg.com/jspsych@7.3.4"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
+  <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css"/>
+
+  <style>
+    html, body { margin:0; height:100%; background:#111; }
+    .note {
+      position: fixed; left: 12px; bottom: 12px; color: #bbb;
+      font: 12px/1.3 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <!-- Your built plugin (IIFE) -->
+  <script src="../dist/index.browser.min.js"></script>
+
+  <script>
+    const jsPsych = initJsPsych({});
+
+    const welcome = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: "<p><b>Gabor Array demo</b><br/>Press any key to start.</p>"
+    };
+
+    // --- (1) Classic 2AFC (left vs right) ---
+    const twoAfc = {
+      type: jsPsychGaborArray,       // or: type: "gabor-array"
+      canvas_width: 900,
+      canvas_height: 540,
+      bg_gray: 0.5,
+      gamma: 1.0,
+      response_keys: ["f","j"],      // F=left, J=right
+      keymap_to_patch_index: { f: 0, j: 1 },
+      end_on_response: true,
+      trial_duration: 750,
+      patches: [
+        { x_px: -220, y_px: 0, sigma_px: 42, sf_cpp: 0.02, orientation_deg:  45, phase_deg:   0, contrast: 0.40, label: "left"  },
+        { x_px:  220, y_px: 0, sigma_px: 42, sf_cpp: 0.02, orientation_deg: 135, phase_deg: 180, contrast: 0.55, label: "right" },
+      ],
+      data: { task: "gabor_2afc_demo" }
+    };
+
+    // --- (2) 6-patch ring (F→idx 0, J→idx 3) ---
+    function ringPatches(n, rPx, base) {
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        const t = (i / n) * 2 * Math.PI;
+        out.push({
+          x_px: Math.round(rPx * Math.cos(t)),
+          y_px: Math.round(rPx * Math.sin(t)),
+          sigma_px: base.sigma_px ?? 40,
+          sf_cpp: base.sf_cpp ?? 0.02,
+          orientation_deg: (base.ori0 ?? 0) + (i * (180 / n)),
+          phase_deg: 0,
+          contrast: base.contrast ?? 0.5,
+        });
+      }
+      return out;
+    }
+
+    const ring = {
+      type: jsPsychGaborArray,
+      canvas_width: 900,
+      canvas_height: 540,
+      bg_gray: 0.5,
+      blend_mode: "add",             // try "max" for non-additive overlap cap
+      response_keys: ["f","j"],
+      keymap_to_patch_index: { f: 0, j: 3 },
+      trial_duration: 1200,
+      patches: ringPatches(6, 180, { sigma_px: 40, sf_cpp: 0.02, ori0: 0, contrast: 0.5 }),
+      data: { task: "gabor_ring" }
+    };
+
+    // --- (3) Overlapping plaid (two co-located patches) ---
+    const plaid = {
+      type: jsPsychGaborArray,
+      canvas_width: 800,
+      canvas_height: 500,
+      bg_gray: 0.5,
+      blend_mode: "add",             // or "max"
+      response_keys: [],             // mouse only
+      end_on_response: true,
+      trial_duration: 1500,
+      patches: [
+        { x_px: 0, y_px: 0, sigma_px: 50, sf_cpp: 0.02, orientation_deg:   0, phase_deg:   0, contrast: 0.5, alpha: 0.9 },
+        { x_px: 0, y_px: 0, sigma_px: 50, sf_cpp: 0.02, orientation_deg:  90, phase_deg: 180, contrast: 0.5, alpha: 0.9 },
+      ],
+      data: { task: "gabor_plaid" }
+    };
+
+    jsPsych.run([welcome, twoAfc, ring, plaid]);
+  </script>
+
+  <div class="note">
+    Demo: (1) F/J for left/right • (2) F→patch 0, J→patch 3 • (3) click nearest patch (mouse).
+  </div>
+</body>
+</html>
