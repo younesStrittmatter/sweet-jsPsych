@@ -97,6 +97,41 @@ const info = <const>{
 };
 type Info = typeof info;
 
+/**
+ * Accept both forms of `streams`:
+ *   - Object form: [{ id, items, ... }, ...]
+ *   - Short form:  [ ["A","B",...], ["X","Y",...] ]
+ * Returns a normalized StreamSpec[] with stable default ids.
+ * - 1 stream  -> "center"
+ * - 2 streams -> "left", "right"
+ * - 3+        -> "s1", "s2", ...
+ */
+function normalizeStreams(raw: any): StreamSpec[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+
+  // Short form: string[][]
+  if (Array.isArray(raw[0])) {
+    const arr = raw as string[][];
+    return arr.map((items, i) => ({
+      id: arr.length === 1 ? "center" : (arr.length === 2 ? (i === 0 ? "left" : "right") : `s${i + 1}`),
+      items: items.map(String),
+    }));
+  }
+
+  // Object form (tolerate missing id/items)
+  const objs = (raw as any[]).map((s, i) => {
+    const id =
+      s?.id ??
+      (raw.length === 1 ? "center" : (raw.length === 2 ? (i === 0 ? "left" : "right") : `s${i + 1}`));
+    const items = Array.isArray(s?.items) ? s.items.map(String) : [];
+    const offset_ms = s?.offset_ms ?? undefined;
+    const attrs = s?.attrs ?? undefined;
+    return { id, items, offset_ms, attrs } as StreamSpec;
+  });
+
+  return objs;
+}
+
 class RsvpPlugin implements JsPsychPlugin<Info> {
   static info = info;
   private timeouts: number[] = [];
@@ -114,15 +149,18 @@ class RsvpPlugin implements JsPsychPlugin<Info> {
     root.style.color = trial.color ?? "#fff";
     display_element.appendChild(root);
 
+    // Normalize streams (accept object form or short form)
+    const streams = normalizeStreams((trial as any).streams ?? []);
+
     // Determine order & layout mode
     const parsedOrder =
       trial.stream_order?.split(",").map((s) => s.trim()).filter(Boolean) ?? null;
 
     const streamsById: Record<string, StreamSpec> = {};
-    for (const s of trial.streams) streamsById[s.id] = s;
+    for (const s of streams) streamsById[s.id] = s;
 
     const visualOrder: string[] =
-      parsedOrder?.filter((id) => id in streamsById) ?? trial.streams.map((s) => s.id);
+      parsedOrder?.filter((id) => id in streamsById) ?? streams.map((s) => s.id);
 
     const dir =
       trial.direction ??
@@ -214,7 +252,7 @@ class RsvpPlugin implements JsPsychPlugin<Info> {
     };
 
     const schedule: SchedItem[] = [];
-    for (const s of trial.streams) {
+    for (const s of streams) {
       const base = t0 + (s.offset_ms ?? 0);
       for (let i = 0; i < s.items.length; i++) {
         const onset = base + i * soa;
