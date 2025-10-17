@@ -1,13 +1,10 @@
 // plugins/rsvp/src/index.ts
 // Minimal RSVP plugin for jsPsych v7 — fixed-size tokens, true circles, bilateral positioning
-// - No fixation/prompt/stylesheets; you style around it in SweetBean.
-// - LEFT–RIGHT layout by default (row). If exactly two streams in row ("bilateral"),
-//   tokens are placed at 1/3 and 2/3 of the screen width (vertically centered).
-// - Fixed-size token boxes to prevent movement when borders toggle.
-// - True circles (width == height, border-box).
-// - New sizing params: token_box_size (default 18vmin), token_font_size (default 10vmin).
-// - Target decoration is OFF by default; only applied if specified.
-// - Works with BOTH `type: jsPsychRsvp` and legacy `type: "rsvp"` via a shim.
+// Enhancements here:
+//  • streams accepts object form OR short form (string[][]) — normalized internally
+//  • explicit targets: TargetSpec[]
+//  • explicit distractors: DistractorSpec[]
+//  • Bilateral wrapper plugin with simpler API and sensible defaults
 
 import type { JsPsych, JsPsychPlugin, TrialType } from "jspsych";
 
@@ -24,10 +21,19 @@ type TargetSpec = {
   label?: string;
   response_window?: number | null;        // null = no time limit (default)
   correct_keys?: string[] | "ALL" | null; // falls back to trial.correct_keys
-  // per-target decoration (optional)
   shape?: "circle" | "square" | "underline" | "none";
   color?: string;   // defaults to trial.color
   stroke?: string;  // defaults to trial.target_stroke
+  padding?: string; // defaults to trial.token_padding
+};
+
+type DistractorSpec = {
+  stream_id: string;
+  index: number;
+  label?: string;
+  shape?: "circle" | "square" | "underline" | "none";
+  color?: string;   // defaults to trial.distractor_color or trial.color
+  stroke?: string;  // defaults to trial.distractor_stroke
   padding?: string; // defaults to trial.token_padding
 };
 
@@ -46,7 +52,7 @@ const PT =
 
 const info = <const>{
   name: "rsvp",
-  version: "0.8.0",
+  version: "0.9.0",
   parameters: {
     // Core presentation
     streams: { type: PT.COMPLEX, default: [{ id: "left", items: [] }, { id: "right", items: [] }] as StreamSpec[] },
@@ -57,16 +63,16 @@ const info = <const>{
     // Layout & appearance
     stream_order: { type: PT.STRING, default: null }, // comma-separated ids; else order of `streams`
     direction: { type: PT.STRING, default: "row" },   // "row" (left–right) | "column" (top–bottom)
-    gap: { type: PT.STRING, default: "6rem" },        // larger default gap (fallback when not bilateral)
+    gap: { type: PT.STRING, default: "6rem" },        // fallback spacing when not bilateral
     background: { type: PT.STRING, default: "#000000" },
     color: { type: PT.STRING, default: "#ffffff" },   // text color (and default border color)
 
     // Token sizing (prevents movement)
-    token_box_size: { type: PT.STRING, default: "18vmin" }, // square box
-    token_font_size: { type: PT.STRING, default: "10vmin" }, // slightly smaller than before
-    token_padding: { type: PT.STRING, default: "0.25em 0.45em" }, // inner padding (applies inside the decoration)
+    token_box_size: { type: PT.STRING, default: "18vmin" },  // square box
+    token_font_size: { type: PT.STRING, default: "10vmin" }, // token glyph size
+    token_padding: { type: PT.STRING, default: "0.25em 0.45em" },
 
-    // Back-compat hint (only maps to direction if you used it)
+    // Back-compat hint (maps to direction if you used it)
     layout_mode: { type: PT.STRING, default: null },
 
     // Responses
@@ -77,9 +83,16 @@ const info = <const>{
 
     // Targets (timing + decoration)
     targets: { type: PT.COMPLEX, default: [] as TargetSpec[] },
-    decorate_targets: { type: PT.BOOL, default: true }, // OFF by default
-    target_shape: { type: PT.STRING, default: "none" },  // no decoration unless specified
+    decorate_targets: { type: PT.BOOL, default: true }, // decoration only visible if shape != "none"
+    target_shape: { type: PT.STRING, default: "none" },
     target_stroke: { type: PT.STRING, default: "3px" },
+
+    // Distractors (explicit positions + decoration)
+    distractors: { type: PT.COMPLEX, default: [] as DistractorSpec[] },
+    decorate_distractors: { type: PT.BOOL, default: false },
+    distractor_shape: { type: PT.STRING, default: "none" },
+    distractor_color: { type: PT.STRING, default: "#888888" },
+    distractor_stroke: { type: PT.STRING, default: "2px" },
 
     // Lifetime
     trial_duration: { type: PT.INT, default: null },
@@ -92,6 +105,7 @@ const info = <const>{
     rt: { type: PT.INT },
     responses: { type: PT.COMPLEX },
     targets: { type: PT.COMPLEX },
+    distractors: { type: PT.COMPLEX },
     schedule: { type: PT.COMPLEX },
   },
 };
@@ -268,35 +282,33 @@ class RsvpPlugin implements JsPsychPlugin<Info> {
         ? trial.correct_keys.split(",").map((k) => k.trim().toLowerCase())
         : null;
 
-    type TargetRuntime = {
-      stream_id: string;
-      index: number;
-      label?: string;
+    type DecoSpec = {
+      shape: "circle" | "square" | "underline" | "none";
+      color: string;
+      stroke: string;
+      padding: string;
+    };
+
+    type TargetRuntime = TargetSpec & DecoSpec & {
       onset: number;
       window: number | null;
       correct_keys: string[] | "ALL" | null;
-      shape: "circle" | "square" | "underline" | "none";
-      color: string;   // border color (defaults to trial.color)
-      stroke: string;
-      padding: string;
       hit: boolean;
       key?: string;
       rt?: number;
     };
 
-    const targetsRuntime: TargetRuntime[] = trial.targets.map((t) => {
+    const targetsRuntime: TargetRuntime[] = (trial.targets ?? []).map((t) => {
       const onset =
         schedule.find((s) => s.stream_id === t.stream_id && s.index === t.index)?.onset
         ?? Number.NaN;
       return {
-        stream_id: t.stream_id,
-        index: t.index,
-        label: t.label,
+        ...t,
         onset,
         window: t.response_window === undefined ? defaultWindow : (t.response_window as number | null),
         correct_keys: t.correct_keys === undefined ? parsedCorrectKeys : t.correct_keys,
         shape: (t.shape ?? trial.target_shape ?? "none") as TargetRuntime["shape"],
-        color: t.color ?? trial.color ?? "#fff", // default border color = text color
+        color: t.color ?? trial.color ?? "#fff",
         stroke: t.stroke ?? trial.target_stroke ?? "3px",
         padding: t.padding ?? trial.token_padding ?? "0.25em 0.45em",
         hit: false,
@@ -306,18 +318,34 @@ class RsvpPlugin implements JsPsychPlugin<Info> {
     const targetMap = new Map<string, TargetRuntime>();
     for (const trg of targetsRuntime) targetMap.set(`${trg.stream_id}#${trg.index}`, trg);
 
+    // ----- Distractors (decoration only) -----
+    type DistrRuntime = DistractorSpec & DecoSpec;
+    const distractorsRuntime: DistrRuntime[] = (trial.distractors ?? []).map((d) => ({
+      ...d,
+      shape: (d.shape ?? trial.distractor_shape ?? "none") as DistrRuntime["shape"],
+      color: d.color ?? trial.distractor_color ?? trial.color ?? "#fff",
+      stroke: d.stroke ?? trial.distractor_stroke ?? "2px",
+      padding: d.padding ?? trial.token_padding ?? "0.25em 0.45em",
+    }));
+
+    const distractorMap = new Map<string, DistrRuntime>();
+    for (const d of distractorsRuntime) distractorMap.set(`${d.stream_id}#${d.index}`, d);
+
     // ----- Present -----
     for (const item of schedule) {
-      // onset
       this.timeouts.push(
         this.jsPsych.pluginAPI.setTimeout(() => {
           const box = streamBoxes[item.stream_id];
           if (!box) return;
-          const trg = trial.decorate_targets ? (targetMap.get(`${item.stream_id}#${item.index}`) ?? null) : null;
-          box.innerHTML = tokenHTML(item.content, trg, trial);
+          // target has priority over distractor if both match
+          const key = `${item.stream_id}#${item.index}`;
+          const deco =
+            (trial.decorate_targets && targetMap.get(key)) ||
+            (trial.decorate_distractors && distractorMap.get(key)) ||
+            null;
+          box.innerHTML = tokenHTML(item.content, deco, trial);
         }, Math.max(0, item.onset - t0))
       );
-      // offset → mask/blank
       this.timeouts.push(
         this.jsPsych.pluginAPI.setTimeout(() => {
           const box = streamBoxes[item.stream_id];
@@ -400,7 +428,7 @@ class RsvpPlugin implements JsPsychPlugin<Info> {
           stream_id: t.stream_id,
           index: t.index,
           label: t.label,
-          onset: t.onset - t0_local,
+          onset: Number.isNaN(t.onset) ? null : (t.onset - t0_local),
           window: t.window,
           correct_keys:
             t.correct_keys === "ALL"
@@ -415,6 +443,15 @@ class RsvpPlugin implements JsPsychPlugin<Info> {
           color: t.color,
           stroke: t.stroke,
           padding: t.padding,
+        })),
+        distractors: distractorsRuntime.map((d) => ({
+          stream_id: d.stream_id,
+          index: d.index,
+          label: d.label ?? null,
+          shape: d.shape,
+          color: d.color,
+          stroke: d.stroke,
+          padding: d.padding,
         })),
         schedule: trial.record_timestamps
           ? schedule.map((s) => ({
@@ -434,12 +471,12 @@ class RsvpPlugin implements JsPsychPlugin<Info> {
 }
 
 export default RsvpPlugin;
-export type { StreamSpec, TargetSpec };
+export type { StreamSpec, TargetSpec, DistractorSpec };
 
 // -------- Helpers --------
 function tokenHTML(
   text: string,
-  trg: null | {
+  deco: null | {
     shape: "circle" | "square" | "underline" | "none";
     color: string;
     stroke: string;
@@ -462,18 +499,18 @@ function tokenHTML(
     `user-select:none`,
   ].join(";");
 
-  if (!trg || trg.shape === "none") {
+  if (!deco || deco.shape === "none") {
     return `<span style="${base}">${escapeHTML(text)}</span>`;
   }
 
-  if (trg.shape === "underline") {
-    const style = `${base};border-bottom:${trg.stroke} solid ${trg.color};padding:${trg.padding};border-radius:0`;
+  if (deco.shape === "underline") {
+    const style = `${base};border-bottom:${deco.stroke} solid ${deco.color};padding:${deco.padding};border-radius:0`;
     return `<span style="${style}">${escapeHTML(text)}</span>`;
   }
 
   // circle/square
-  const radius = trg.shape === "circle" ? "50%" : "8%";
-  const style = `${base};border:${trg.stroke} solid ${trg.color};border-radius:${radius};padding:${trg.padding}`;
+  const radius = deco.shape === "circle" ? "50%" : "8%";
+  const style = `${base};border:${deco.stroke} solid ${deco.color};border-radius:${radius};padding:${deco.padding}`;
   return `<span style="${style}">${escapeHTML(text)}</span>`;
 }
 
@@ -484,16 +521,102 @@ function escapeHTML(s: string): string {
 }
 
 // -----------------------------
+// Bilateral wrapper (simpler API)
+// -----------------------------
+const bilateralInfo = <const>{
+  name: "rsvp-bilateral",
+  version: "0.3.1",
+  parameters: {
+    left: { type: PT.COMPLEX, default: [] as string[] },
+    right: { type: PT.COMPLEX, default: [] as string[] },
+    target_side: { type: PT.STRING, default: "left" },         // "left" | "right"
+    target_index: { type: PT.INT, default: 0 },
+    target_shape: { type: PT.STRING, default: "circle" },
+
+    // Optional distractor; if you set shape OR index, a distractor is added on the opposite stream.
+    // If index is omitted, it defaults to target_index.
+    distractor_index: { type: PT.INT, default: null as any },
+    distractor_shape: { type: PT.STRING, default: null as any },
+
+    // pass-through common options
+    stimulus_duration: { type: PT.INT, default: 100 },
+    isi: { type: PT.INT, default: 0 },
+    choices: { type: PT.KEYS, default: "ALL" },
+    mask_html: { type: PT.STRING, default: null },
+    color: { type: PT.STRING, default: "#ffffff" },
+    background: { type: PT.STRING, default: "#000000" },
+    token_box_size: { type: PT.STRING, default: "18vmin" },
+    token_font_size: { type: PT.STRING, default: "10vmin" },
+    token_padding: { type: PT.STRING, default: "0.25em 0.45em" },
+    trial_duration: { type: PT.INT, default: null },
+  },
+};
+type BilateralInfo = typeof bilateralInfo;
+
+class BilateralRsvpPlugin implements JsPsychPlugin<BilateralInfo> {
+  static info = bilateralInfo;
+  constructor(private jsPsych: JsPsych) {}
+
+  trial(display_element: HTMLElement, trial: TrialType<BilateralInfo>) {
+    const leftItems  = (trial.left  ?? []).map(String);
+    const rightItems = (trial.right ?? []).map(String);
+
+    const targetSide = (trial.target_side ?? "left").toLowerCase() === "right" ? "right" : "left";
+    const otherSide  = targetSide === "left" ? "right" : "left";
+
+    // Create a distractor iff user supplied either shape or index.
+    // If index omitted, default to the target_index.
+    const wantDistractor =
+      (trial as any).distractor_index != null || (trial as any).distractor_shape != null;
+    const dIndex = ((trial as any).distractor_index ?? trial.target_index) as number;
+    const dShape = (trial as any).distractor_shape as string | null;
+
+    const baseTrial: any = {
+      type: (RsvpPlugin as any),
+      direction: "row",
+      streams: [
+        { id: "left", items: leftItems },
+        { id: "right", items: rightItems },
+      ],
+      stimulus_duration: trial.stimulus_duration,
+      isi: trial.isi,
+      mask_html: trial.mask_html,
+      choices: trial.choices,
+      color: trial.color,
+      background: trial.background,
+      token_box_size: trial.token_box_size,
+      token_font_size: trial.token_font_size,
+      token_padding: trial.token_padding,
+      trial_duration: trial.trial_duration,
+
+      // target
+      decorate_targets: true,
+      targets: [{ stream_id: targetSide, index: trial.target_index, shape: trial.target_shape }],
+
+      // distractor (optional, on the opposite stream)
+      decorate_distractors: wantDistractor,
+      distractors: wantDistractor
+        ? [{ stream_id: otherSide, index: dIndex, ...(dShape != null ? { shape: dShape } : {}) }]
+        : [],
+    };
+
+    const impl = new (RsvpPlugin as any)(this.jsPsych);
+    impl.trial(display_element, baseTrial);
+  }
+}
+
+// -----------------------------
 // Globals & legacy-type shim
 // -----------------------------
 declare const window: any;
 
-// v7 way (recommended): use `type: jsPsychRsvp`
+// v7 way (recommended): use `type: jsPsychRsvp` or `type: jsPsychBilateralRsvp`
 if (typeof window !== "undefined") {
   window.jsPsychRsvp = RsvpPlugin;
+  window.jsPsychBilateralRsvp = BilateralRsvpPlugin;
 }
 
-// Legacy convenience: allow `type: "rsvp"` without changing caller code.
+// Legacy convenience: allow `type: "rsvp"` and `type: "rsvp-bilateral"` without changing caller code.
 if (typeof window !== "undefined" && typeof window.initJsPsych === "function") {
   const __init = window.initJsPsych;
   window.initJsPsych = function (...args: any[]) {
@@ -502,11 +625,18 @@ if (typeof window !== "undefined" && typeof window.initJsPsych === "function") {
 
     function replaceTypes(node: any): any {
       if (!node || typeof node !== "object") return node;
-      if (typeof node.type === "string" && node.type.toLowerCase() === "rsvp") {
-        node.type = RsvpPlugin;
-        if (node.layout_mode === "bilateral") node.direction = node.direction ?? "row";
-        if (node.layout_mode === "vertical") node.direction = node.direction ?? "column";
+
+      if (typeof node.type === "string") {
+        const t = node.type.toLowerCase();
+        if (t === "rsvp") {
+          node.type = RsvpPlugin;
+          if (node.layout_mode === "bilateral") node.direction = node.direction ?? "row";
+          if (node.layout_mode === "vertical")  node.direction = node.direction ?? "column";
+        } else if (t === "rsvp-bilateral") {
+          node.type = BilateralRsvpPlugin;
+        }
       }
+
       if (Array.isArray(node.timeline)) node.timeline = node.timeline.map(replaceTypes);
       if (Array.isArray(node.timeline_variables)) {
         node.timeline_variables = node.timeline_variables.map(replaceTypes);
