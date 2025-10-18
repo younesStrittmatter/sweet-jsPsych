@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>jsPsych RSVP Demo</title>
+  <title>jsPsych RSVP Demos — pure-content streams + target/distractor API</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
   <!-- jsPsych core -->
@@ -19,66 +19,224 @@
   </style>
 </head>
 <body>
-  <!-- Your bundle from the TS file above -->
+  <!-- Your bundle built from the updated TS file -->
   <script src="../dist/index.browser.min.js"></script>
 
   <script>
     const jsPsych = initJsPsych({});
-
-    const welcome = {
+    const pause = (msg) => ({
       type: jsPsychHtmlKeyboardResponse,
-      stimulus: "<p><b>RSVP demos</b><br>Press any key to start.</p>"
+      stimulus: `<p style="color:#ddd">${msg}</p><p style="color:#aaa">Press any key…</p>`
+    });
+
+    const welcome = pause("<b>RSVP demos</b><br>Streams contain only raw glyphs.<br>All shapes/colors/html come from targets/distractors.");
+
+    // ------------------------------------------------------------------------
+    // DEMO 1 — Scalars (single target + single distractor)
+    // - Streams are *pure* content.
+    // - target_* and distractor_* are single values.
+    // ------------------------------------------------------------------------
+    const demo1_scalars = {
+      type: jsPsychRsvp,
+      streams: [
+        ["O","O","7","O","O","O"],  // left (pure content)
+        ["O","O","O","O","O","O"],  // right (pure content)
+      ],
+      stimulus_duration: 200,
+      isi: 40,
+      background: "#000",
+      color: "#fff",
+      choices: "ALL",
+
+      // enable visual decoration since we define targets/distractors
+      decorate_targets: true,
+      decorate_distractors: true,
+
+      // TARGET (left, index 2): outline circle, green border; if shape:"none", it would color the digit itself
+      target_index: 2,
+      target_side: "left",
+      target_shape: "circle",
+      target_color: "#00b050",
+
+      // DISTRACTOR (right, index 2): outline square with gray border
+      distractor_index: 2,
+      distractor_side: "right",
+      distractor_shape: "square",
+      // per-item color override (falls back to distractor_color param if omitted)
+      distractor_color2: "#888"
     };
 
-    // ----- Demo 1: Base plugin with explicit targets[] and distractors[] -----
-    const trial_rsvp_explicit = {
-      type: jsPsychRsvp,                  // or "rsvp"
-      // short-form streams — left, right
+    // ------------------------------------------------------------------------
+    // DEMO 2 — Lists + broadcasting
+    // - Provide arrays for indexes/sides/colors; shorter lists broadcast.
+    // ------------------------------------------------------------------------
+    const demo2_lists = {
+      type: jsPsychRsvp,
       streams: [
-        ["O","O","Q","O","O","O"],
+        ["K","M","H","7","Z","F","R"],
+        ["G","C","Y","U","B","V","Q"],
+      ],
+      stimulus_duration: 180,
+      isi: 50,
+      background: "#000",
+      color: "#fff",
+      choices: "ALL",
+      decorate_targets: true,
+      decorate_distractors: true,
+
+      // Three targets at different places/sides; shapes list is shorter → broadcast
+      target_index: [1, 3, 5],
+      target_side:  ["left", "right", "left"],
+      target_shape: ["underline"],                // broadcast underline to all targets
+      target_color: ["#ff5577", "#66ccff", "#ffcc66"],
+
+      // Two distractors; sides list shorter than indexes → broadcast sides
+      distractor_index: [1, 4],
+      distractor_side:  ["right"],                // "right" applies to both
+      distractor_shape: ["circle", "square"],    // cycles if longer than 1
+      distractor_color2: ["#999", "#bbb"]
+    };
+
+    // ------------------------------------------------------------------------
+    // DEMO 3 — Color-only targets (shape:"none")
+    // - Colors just the font of the existing glyphs.
+    // ------------------------------------------------------------------------
+    const demo3_color_only = {
+      type: jsPsychRsvp,
+      streams: [
+        ["O","O","3","O","6","O","8"],
+        ["O","O","O","O","O","O","O"],
+      ],
+      stimulus_duration: 200,
+      isi: 40,
+      background: "#000",
+      color: "#fff",
+      choices: "ALL",
+      decorate_targets: true,
+      decorate_distractors: true,
+
+      target_index: [2, 4, 6],
+      target_side:  ["left", "left", "left"],
+      target_shape: ["none"],                    // no outline — color affects glyph
+      target_color: ["#167ad3", "#ff7f00", "#30c050"],
+
+      // A single post-target distractor (underline) at index 5
+      distractor_index: [5],
+      distractor_side:  ["left"],
+      distractor_shape: ["underline"],
+      distractor_color2: ["#888"]
+    };
+
+    // ------------------------------------------------------------------------
+    // DEMO 4 — html template with {{content}}
+    // - The stream item is kept as content; we wrap it with custom HTML.
+    // ------------------------------------------------------------------------
+    const demo4_html_template = {
+      type: jsPsychRsvp,
+      streams: [
+        ["O","O","2","O","O","O"],
         ["O","O","O","O","O","O"],
       ],
-      stimulus_duration: 200,
+      stimulus_duration: 180,
       isi: 40,
-      choices: ["f","j"],
-
-      // target on the left at index 2 (circle)
+      background: "#000",
+      color: "#fff",
+      choices: "ALL",
       decorate_targets: true,
-      target_shape: "none",               // let the per-target set it
-      targets: [
-        { stream_id: "left", index: 2, shape: "circle" },
-      ],
-
-      // distractor on the right at the same frame (square)
       decorate_distractors: true,
-      distractor_shape: "underline",      // default if per-distractor omits shape
-      distractor_color: "#888",
-      distractor_stroke: "2px",
-      distractors: [
-        { stream_id: "right", index: 2, shape: "square" },
+
+      target_index: [2],
+      target_side:  ["left"],
+      target_shape: ["none"],
+      target_html:  [
+        `<span style="font-weight:800;color:#ff4d4d;border-bottom:3px solid #ff7f00;padding:0.05em 0.2em">{{content}}</span>`
       ],
+
+      distractor_index: [3],
+      distractor_side:  ["left"],
+      distractor_shape: ["square"],
+      distractor_color2: ["#aaa"]
     };
 
-    // ----- Demo 2: Simpler bilateral API with distractor_index / distractor_shape -----
-    const trial_bilateral_simple = {
-      type: jsPsychBilateralRsvp,         // or "rsvp-bilateral"
-      left:  ["O","O","O","O","Q","O"],
-      right: ["O","O","Q","O","O","O"],
-      target_side: "right",
-      target_index: 4,
-      target_shape: "square",
-      distractor_shape: "circle",
-      stimulus_duration: 200,
+    // ------------------------------------------------------------------------
+    // DEMO 5 — Bilateral wrapper (arrays supported)
+    // - Two targets (different sides/indices).
+    // - If distractor_side omitted, it auto-places on the opposite side.
+    // ------------------------------------------------------------------------
+    const demo5_bilateral_arrays = {
+      type: jsPsychBilateralRsvp,
+      left:  ["O","O","7","O","O","O","O"],
+      right: ["O","O","O","O","3","O","O"],
+      stimulus_duration: 180,
       isi: 40,
-      choices: ["f","j"],
+      background: "#000",
+      color: "#fff",
+      choices: "ALL",
+
+      // targets
+      target_index: [2, 4],
+      target_side:  ["left", "right"],
+      target_shape: ["circle", "square"],
+      target_color: ["#00b050", "#ff7f00"],
+
+      // distractors: indexes match; side omitted → opposite of each target
+      distractor_index: [2, 4],
+      distractor_shape: ["underline", "circle"],
+      distractor_color: ["#888", "#bbb"]
     };
 
-    jsPsych.run([welcome, trial_rsvp_explicit, trial_bilateral_simple]);
+    // ------------------------------------------------------------------------
+    // DEMO 6 — 50/50 ms EEG-style schedule
+    // - One colored target (no outline), then a post-target distractor on same side.
+    // ------------------------------------------------------------------------
+    const EEG_TARGET_INDEX = 3; // choose any valid frame
+    const demo6_eeg_like = {
+      type: jsPsychRsvp,
+      streams: [
+        ["K","M","H","7","Z","F","R","T","S"],     // left
+        ["G","C","Y","U","B","V","Q","S","L"],     // right
+      ],
+      stimulus_duration: 50,                       // 50 on
+      isi: 50,                                     // 50 off → 10 Hz
+      background: "#000",
+      color: "#fff",
+      choices: "ALL",
+      decorate_targets: true,
+      decorate_distractors: true,
+
+      // target: color only (shape none)
+      target_index: EEG_TARGET_INDEX,
+      target_side:  "left",
+      target_shape: "none",
+      target_color: "#00b050",
+
+      // post-target distractor at t+1, same side
+      distractor_index: EEG_TARGET_INDEX + 1,
+      distractor_side:  "left",
+      distractor_shape: "underline",
+      distractor_color2: "#888"
+    };
+
+    jsPsych.run([
+      welcome,
+      pause("<b>Demo 1</b> — Scalars: one target + one distractor"),
+      demo1_scalars,
+      pause("<b>Demo 2</b> — Lists + broadcasting"),
+      demo2_lists,
+      pause("<b>Demo 3</b> — Color-only (shape:'none')"),
+      demo3_color_only,
+      pause("<b>Demo 4</b> — html template with {{content}}"),
+      demo4_html_template,
+      pause("<b>Demo 5</b> — Bilateral wrapper with arrays"),
+      demo5_bilateral_arrays,
+      pause("<b>Demo 6</b> — 50/50 ms EEG-style"),
+      demo6_eeg_like,
+      pause("<b>Done.</b>")
+    ]);
   </script>
 
   <div class="note">
-    Demo 1: base plugin with <code>targets[]</code> and <code>distractors[]</code> ·
-    Demo 2: bilateral wrapper with <code>distractor_index</code> &amp; <code>distractor_shape</code>.
+    Streams are pure content. Use <code>target_*</code>/<code>distractor_*</code> (scalars or lists) for shape/color/html.
   </div>
 </body>
 </html>
