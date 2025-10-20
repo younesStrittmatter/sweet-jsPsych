@@ -1,6 +1,6 @@
 {
   "name": "@sweet-jspsych/plugin-symbol",
-  "version": "0.4.2",
+  "version": "0.4.5",
   "description": "Generalized layered Symbol plugin for jsPsych 7.x (rings, frames, stripes, noise textures, windows, blend modes).",
   "type": "module",
   "files": [

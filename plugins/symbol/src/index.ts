@@ -1,23 +1,18 @@
 // sb-symbol — generalized, layered visual primitives & textures for jsPsych
-// Now with: color fills (CSS), triangle primitive, and top-level aliases: item, color.
-// Also supports: items[] with z-order/blends; primitives (circle|annulus|rect|rectframe|stripe|cross|triangle);
-// textures (stripes|noise); mask/window (circular|rect|raisedcos|gaussian); px/deg units; keyboard/mouse.
+// Restored defaults (works out-of-the-box) + triangle primitive + CSS color for primitives.
+// Primitives: circle | triangle | annulus | rect | rectframe | stripe | cross
+// Textures : stripes | noise
+// Windows  : circular | rect | raisedcos | gaussian  (alias "mask" accepted)
+// Units    : px or deg (px_per_deg defaults to 60)
+// Notes    : textures fill the canvas by default; if win_radius_* is given, mask is inferred.
 //
-// Minimal single-item example (uses aliases):
-//   { type:"symbol", item:"triangle", color:"green", trial_duration:1500, response_keys:["f","j"] }
-//
-// Full layered example (two masked stripe textures → plaid + annulus):
-//   { type:"symbol", px_per_deg:60, items:[
-//       { kind:"texture", mode:"stripes", box:"canvas", orientation_deg:45,  contrast:0.6, gray:0.5, mask:"circular", win_radius_deg:2, blend:"multiply" },
-//       { kind:"texture", mode:"stripes", box:"canvas", orientation_deg:135, contrast:0.3, gray:0.5, mask:"circular", win_radius_deg:2, blend:"multiply" },
-//       { kind:"annulus", inner_deg:2, outer_deg:3, gray:0.55, z:10 }
-//     ],
-//     trial_duration: 500
-//   }
+// Minimal:
+// { type:"symbol",
+//   items:[{ kind:"texture", mode:"stripes", orientation_deg:135, win_radius_deg:2 }],
+//   trial_duration:500 }
 
 import type { JsPsych, JsPsychPlugin, TrialType } from "jspsych";
 
-// ---- ParameterType compatibility (avoid undefined PT.COMPLEX in IIFE) ----
 const PT =
   typeof window !== "undefined" && (window as any).jsPsych
     ? ((window as any).jsPsych.plugins?.parameterType ??
@@ -33,35 +28,29 @@ type Blend =
 type WindowKind = "none" | "circular" | "rect" | "raisedcos" | "gaussian";
 
 type Common = {
-  // position (relative to canvas center)
-  x_px?: number; y_px?: number; x_deg?: number; y_deg?: number;
-
-  // drawing order & compositing
-  z?: number;                     // default 0; higher draws later
-  blend?: Blend;                  // default "source-over"
-
-  // appearance
-  // Prefer `color` (CSS string). If omitted, `gray` (0..1) is used with gamma.
-  color?: string;                 // CSS: "red", "#0f0", "rgb(200,0,0)", etc.
-  gray?: number;                  // 0..1 (default bg_gray when color not given)
-  alpha?: number;                 // 0..1 (default 1)
-  rotation_deg?: number;          // rotates the item
-  stroke_px?: number;             // for frames/lines/outlines
+  x_px?: number; y_px?: number; x_deg?: number; y_deg?: number; // position
+  z?: number;                  // draw order (higher = later)
+  blend?: Blend;               // compositing
+  // Appearance: prefer CSS `color`; else `gray` (0..1)
+  color?: string;              // "red", "#0f0", "rgb(200,0,0)", etc.
+  gray?: number;               // used if color not given (gamma corrected)
+  alpha?: number;              // 0..1
+  rotation_deg?: number;
+  stroke_px?: number;
   label?: string;
 
-  // optional window mask (applies to textures & filled rects/circles)
-  // Aliases supported: `mask` or `window`
+  // Window/Mask (alias: mask)
   window?: WindowKind;
   mask?: WindowKind;
 
-  // window sizing (px or deg)
-  win_radius_px?: number; win_radius_deg?: number;   // for circular/raisedcos/gaussian
-  win_sigma_px?: number; win_sigma_deg?: number;     // for gaussian envelope
+  // Window sizing (px or deg)
+  win_radius_px?: number; win_radius_deg?: number;
+  win_sigma_px?: number;  win_sigma_deg?: number;
   win_rect_w_px?: number; win_rect_w_deg?: number;
   win_rect_h_px?: number; win_rect_h_deg?: number;
 
-  // texture coverage shorthand
-  // box:"canvas" => fill whole canvas; box:"cover-window" => cover circular window (√2 * diameter)
+  // Texture coverage shorthand
+  // If unspecified, textures default to full canvas coverage
   box?: "canvas" | "cover-window";
 };
 
@@ -72,8 +61,8 @@ type Circle = Common & {
 };
 
 type Triangle = Common & {
-  kind: "triangle";               // equilateral; centered
-  side_px?: number; side_deg?: number;  // edge length
+  kind: "triangle";            // equilateral, centered
+  side_px?: number; side_deg?: number;
   fill?: boolean; // default true
 };
 
@@ -88,12 +77,11 @@ type Rect = Common & {
   width_px?: number; height_px?: number;
   width_deg?: number; height_deg?: number;
   corner_radius_px?: number;
-  // rectframe uses stroke; rect fills (unless fill:false for outline style)
-  fill?: boolean; // respected only for "rect"; default true
+  fill?: boolean; // respected for "rect" only
 };
 
 type StripeBar = Common & {
-  kind: "stripe";                // single solid bar (not repeating)
+  kind: "stripe";
   stripe_len_px?: number; stripe_len_deg?: number;
   stripe_w_px?: number;   stripe_w_deg?: number;
 };
@@ -106,23 +94,23 @@ type Cross = Common & {
 
 type TextureStripes = Common & {
   kind: "texture";
-  mode: "stripes";               // repeating light/dark (square-wave)
+  mode: "stripes";
   box_w_px?: number; box_w_deg?: number;
   box_h_px?: number; box_h_deg?: number;
-  orientation_deg?: number;      // stripe orientation
-  bar_w_px?: number; bar_w_deg?: number;
-  duty?: number;                 // 0..1 dark fraction; default 0.5
-  phase_deg?: number;            // along normal
-  contrast?: number;             // 0..1 amplitude around gray
+  orientation_deg?: number;
+  bar_w_px?: number; bar_w_deg?: number;   // half-period for square wave
+  duty?: number;                            // 0..1 dark fraction
+  phase_deg?: number;
+  contrast?: number;                        // amplitude around gray
 };
 
 type TextureNoise = Common & {
   kind: "texture";
-  mode: "noise";                 // white noise
+  mode: "noise";
   box_w_px?: number; box_w_deg?: number;
   box_h_px?: number; box_h_deg?: number;
-  contrast?: number;             // 0..1 amplitude around gray
-  seed?: number;                 // reproducibility
+  contrast?: number;
+  seed?: number;
 };
 
 type TextureItem = TextureStripes | TextureNoise;
@@ -134,7 +122,7 @@ type DataOut = {
   offset_ms: number;
   resp_key: string | null;
   n_items: number;
-  items: Array<{ kind: string; z: number; x_px: number; y_px: number; color?: string | null; gray?: number | null; alpha: number; label?: string }>;
+  items: Array<{ kind: string; z: number; x_px: number; y_px: number; gray?: number; color?: string; alpha: number; label?: string }>;
 };
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -149,11 +137,8 @@ function mulberry32(a: number) {
   };
 }
 
-// Compute CSS fill/stroke: prefer item.color; else gray→gamma-corrected rgb
 function styleColor(item: any, gamma: number, bg_gray_fallback: number) {
-  if (typeof item.color === "string" && item.color.trim().length > 0) {
-    return item.color; // use CSS as-is
-  }
+  if (typeof item.color === "string" && item.color.trim()) return item.color;
   const g = clamp01((item.gray ?? bg_gray_fallback) as number);
   const u8 = Math.round(Math.pow(g, 1 / gamma) * 255);
   return `rgb(${u8},${u8},${u8})`;
@@ -161,19 +146,15 @@ function styleColor(item: any, gamma: number, bg_gray_fallback: number) {
 
 const info = <const>{
   name: "symbol",
-  version: "0.6.0",
+  version: "0.5.1",
   parameters: {
-    // Display / gamma
     canvas_width:   { type: PT.INT,   default: 800 },
     canvas_height:  { type: PT.INT,   default: 600 },
     bg_gray:        { type: PT.FLOAT, default: 0.5 },
-    px_per_deg:     { type: PT.FLOAT, default: null as number | null },
+    px_per_deg:     { type: PT.FLOAT, default: 60 },   // ✅ sensible default
     gamma:          { type: PT.FLOAT, default: 1.0 },
 
-    // Layered items OR single alias
-    items:          { type: PT.COMPLEX, default: [] as Item[] },
-    item:           { type: PT.COMPLEX, default: null as any },       // alias: one item (string or object)
-    color:          { type: PT.STRING,  default: null as string | null }, // alias: overrides all per-item colors
+    items:          { type: PT.COMPLEX, default: [] as Item[] }, // layered content
 
     // Back-compat (legacy single symbol)
     kind:           { type: PT.STRING, default: null as any },
@@ -183,8 +164,8 @@ const info = <const>{
     // Timing / responses
     trial_duration: { type: PT.INT,   default: null as number | null },
     timeout_ms:     { type: PT.INT,   default: null as number | null },
-    end_on_response:{ type: PT.BOOL,  default: false },
-    response_keys:  { type: PT.KEYS,  default: [] as string[] },
+    response_ends_trial:{ type: PT.BOOL,  default: true },
+    choices:  { type: PT.KEYS,  default: [] as string[] },
     allow_mouse:    { type: PT.BOOL,  default: false },
   },
   data: {
@@ -221,35 +202,30 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
     if (!ctx) throw new Error("2D canvas not supported");
     this.ctx = ctx;
 
-    // Background
     this.fillBackground(trial.bg_gray, trial.gamma);
 
-    // Items (with back-compat + single-item/color aliases)
     const items = this.normalizeItems(trial);
-
-    // Sort by z (layering)
     items.sort((a, b) => (a.z - b.z));
 
-    // Draw each item, respecting blend/alpha/window
     for (const it of items) this.drawItem(trial, it);
 
-    // Responses
     this.startTime = performance.now();
-    if (trial.response_keys && (trial.response_keys as string[]).length > 0) {
+
+    if (trial.choices && (trial.choices as string[]).length > 0) {
       this.keyboardListener = this.jsPsych.pluginAPI.getKeyboardResponse({
         callback_function: (info: any) => {
-          if (trial.end_on_response) this.end(display_element, trial, info.key as string, info.rt as number, items);
+          if (trial.response_ends_trial) this.end(display_element, trial, info.key as string, info.rt as number, items);
         },
-        valid_responses: trial.response_keys as string[],
+        valid_responses: trial.choices as string[],
         rt_method: "performance",
-        persist: !trial.end_on_response,
+        persist: !trial.response_ends_trial,
         allow_held_key: false,
       });
     }
     if (trial.allow_mouse) {
-      const handler = () => { if (trial.end_on_response) this.end(display_element, trial, null, null, items); };
-      this.canvas.addEventListener("mousedown", handler, { once: !!trial.end_on_response });
-      if (!trial.end_on_response) this.canvas.addEventListener("mousedown", handler);
+      const handler = () => { if (trial.response_ends_trial) this.end(display_element, trial, null, null, items); };
+      this.canvas.addEventListener("mousedown", handler, { once: !!trial.response_ends_trial });
+      if (!trial.response_ends_trial) this.canvas.addEventListener("mousedown", handler);
     }
 
     const td = trial.timeout_ms ?? trial.trial_duration;
@@ -266,20 +242,8 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
   }
 
   private normalizeItems(trial: Trial) {
-    const ppd = trial.px_per_deg ?? null;
-    const trialColor = (trial as any).color ?? null;
-    const single = (trial as any).item;
-
-    // Source: explicit items[] OR single alias OR legacy
-    let src: any[] | null = null;
-    if (Array.isArray((trial as any).items) && (trial as any).items.length > 0) {
-      src = (trial as any).items as any[];
-    } else if (single != null) {
-      // string -> { kind:"..." }, object -> use directly
-      src = [ (typeof single === "string") ? { kind: single } : single ];
-    } else {
-      src = this.legacyToItems(trial);
-    }
+    const ppd = trial.px_per_deg ?? 60; // fallback enforced by default above
+    const src: Item[] = (Array.isArray(trial.items) && trial.items.length > 0) ? (trial.items as Item[]) : this.legacyToItems(trial);
 
     const CW = this.canvas?.width  ?? (trial.canvas_width as number)  ?? 800;
     const CH = this.canvas?.height ?? (trial.canvas_height as number) ?? 600;
@@ -287,60 +251,69 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
     return (src as any[]).map((raw: any) => {
       const base: any = {
         kind: raw.kind as Item["kind"],
-        x_px: raw.x_px ?? (ppd && raw.x_deg != null ? raw.x_deg * ppd : 0),
-        y_px: raw.y_px ?? (ppd && raw.y_deg != null ? raw.y_deg * ppd : 0),
+        x_px: raw.x_px ?? (raw.x_deg != null ? raw.x_deg * ppd : 0),
+        y_px: raw.y_px ?? (raw.y_deg != null ? raw.y_deg * ppd : 0),
         z: (raw.z ?? 0) as number,
         blend: (raw.blend ?? "source-over") as Blend,
-        // prefer item.color else raw.gray else trial.bg_gray
-        color: (trialColor != null ? trialColor : raw.color) ?? null,
+        color: raw.color ?? null,
         gray: clamp01((raw.gray ?? trial.bg_gray) as number),
         alpha: clamp01((raw.alpha ?? 1) as number),
         rotation_deg: (raw.rotation_deg ?? 0) as number,
         stroke_px: (raw.stroke_px ?? 2) as number,
         label: raw.label as string | undefined,
-        window: (raw.mask ?? raw.window ?? "none") as WindowKind,
+        window: (raw.window ?? raw.mask ?? "none") as WindowKind, // accept alias
         box: raw.box as ("canvas" | "cover-window" | undefined),
 
-        win_radius_px:  raw.win_radius_px ?? (ppd && raw.win_radius_deg != null ? raw.win_radius_deg * ppd : null),
-        win_sigma_px:   raw.win_sigma_px  ?? (ppd && raw.win_sigma_deg  != null ? raw.win_sigma_deg  * ppd : null),
-        win_rect_w_px:  raw.win_rect_w_px ?? (ppd && raw.win_rect_w_deg != null ? raw.win_rect_w_deg * ppd : null),
-        win_rect_h_px:  raw.win_rect_h_px ?? (ppd && raw.win_rect_h_deg != null ? raw.win_rect_h_deg * ppd : null),
+        win_radius_px:  raw.win_radius_px ?? (raw.win_radius_deg != null ? raw.win_radius_deg * ppd : null),
+        win_sigma_px:   raw.win_sigma_px  ?? (raw.win_sigma_deg  != null ? raw.win_sigma_deg  * ppd : null),
+        win_rect_w_px:  raw.win_rect_w_px ?? (raw.win_rect_w_deg != null ? raw.win_rect_w_deg * ppd : null),
+        win_rect_h_px:  raw.win_rect_h_px ?? (raw.win_rect_h_deg != null ? raw.win_rect_h_deg * ppd : null),
       };
 
+      // Normalize "circle" → "circular"
       if (base.window === "circle") base.window = "circular";
+
+      // ✅ Infer a mask when any win_* was provided (deg or px), even if px conversion wasn’t done yet
+      if ((raw.window == null) && (raw.mask == null)) {
+        const hasCircleWin = (raw.win_radius_px != null) || (raw.win_radius_deg != null);
+        const hasRectWin   = (raw.win_rect_w_px != null) || (raw.win_rect_h_px != null) ||
+                             (raw.win_rect_w_deg != null) || (raw.win_rect_h_deg != null);
+        if (hasCircleWin) base.window = "circular";
+        else if (hasRectWin) base.window = "rect";
+      }
 
       switch (String(base.kind || "").toLowerCase()) {
         case "circle":
-          base.radius_px = raw.radius_px ?? (ppd && raw.radius_deg != null ? raw.radius_deg * ppd : 40);
+          base.radius_px = raw.radius_px ?? (raw.radius_deg != null ? raw.radius_deg * ppd : 40);
           base.fill = raw.fill ?? true;
           break;
 
         case "triangle":
-          base.side_px = raw.side_px ?? (ppd && raw.side_deg != null ? raw.side_deg * ppd : 100);
+          base.side_px = raw.side_px ?? (raw.side_deg != null ? raw.side_deg * ppd : 100);
           base.fill = raw.fill ?? true;
           break;
 
         case "annulus":
-          base.inner_px = raw.inner_px ?? (ppd && raw.inner_deg != null ? raw.inner_deg * ppd : 0);
-          base.outer_px = raw.outer_px ?? (ppd && raw.outer_deg != null ? raw.outer_deg * ppd : 60);
+          base.inner_px = raw.inner_px ?? (raw.inner_deg != null ? raw.inner_deg * ppd : 0);
+          base.outer_px = raw.outer_px ?? (raw.outer_deg != null ? raw.outer_deg * ppd : 60);
           break;
 
         case "rect":
         case "rectframe":
-          base.width_px  = raw.width_px  ?? (ppd && raw.width_deg  != null ? raw.width_deg  * ppd : 120);
-          base.height_px = raw.height_px ?? (ppd && raw.height_deg != null ? raw.height_deg * ppd : 120);
+          base.width_px  = raw.width_px  ?? (raw.width_deg  != null ? raw.width_deg  * ppd : 120);
+          base.height_px = raw.height_px ?? (raw.height_deg != null ? raw.height_deg * ppd : 120);
           base.corner_radius_px = Math.max(0, raw.corner_radius_px ?? 0);
           if (base.kind === "rect") base.fill = raw.fill ?? true;
           break;
 
         case "stripe":
-          base.stripe_len_px = raw.stripe_len_px ?? (ppd && raw.stripe_len_deg != null ? raw.stripe_len_deg * ppd : 300);
-          base.stripe_w_px   = raw.stripe_w_px   ?? (ppd && raw.stripe_w_deg   != null ? raw.stripe_w_deg   * ppd : 20);
+          base.stripe_len_px = raw.stripe_len_px ?? (raw.stripe_len_deg != null ? raw.stripe_len_deg * ppd : 300);
+          base.stripe_w_px   = raw.stripe_w_px   ?? (raw.stripe_w_deg   != null ? raw.stripe_w_deg   * ppd : 20);
           break;
 
         case "cross":
-          base.arm_len_px = raw.arm_len_px ?? (ppd && raw.arm_len_deg != null ? raw.arm_len_deg * ppd : 40);
-          base.arm_w_px   = raw.arm_w_px   ?? (ppd && raw.arm_w_deg   != null ? raw.arm_w_deg   * ppd : 6);
+          base.arm_len_px = raw.arm_len_px ?? (raw.arm_len_deg != null ? raw.arm_len_deg * ppd : 40);
+          base.arm_w_px   = raw.arm_w_px   ?? (raw.arm_w_deg   != null ? raw.arm_w_deg   * ppd : 6);
           break;
 
         case "texture": {
@@ -349,30 +322,20 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
 
           if (raw.mode === "noise") {
             base.mode = "noise";
-            if (wantCanvas) {
-              base.box_w_px = CW; base.box_h_px = CH;
-            } else if (wantCover) {
-              const side = Math.ceil(2 * base.win_radius_px * Math.SQRT2) + 2;
-              base.box_w_px = side; base.box_h_px = side;
-            } else {
-              base.box_w_px = raw.box_w_px ?? (ppd && raw.box_w_deg != null ? raw.box_w_deg * ppd : CW);
-              base.box_h_px = raw.box_h_px ?? (ppd && raw.box_h_deg != null ? raw.box_h_deg * ppd : CH);
-            }
+            if (wantCanvas)      { base.box_w_px = CW; base.box_h_px = CH; }
+            else if (wantCover)  { const side = Math.ceil(2 * base.win_radius_px * Math.SQRT2) + 2; base.box_w_px = side; base.box_h_px = side; }
+            else                 { base.box_w_px = raw.box_w_px ?? (raw.box_w_deg != null ? raw.box_w_deg * ppd : CW);
+                                   base.box_h_px = raw.box_h_px ?? (raw.box_h_deg != null ? raw.box_h_deg * ppd : CH); }
             base.contrast = clamp01(raw.contrast ?? 0.5);
             base.seed = Number.isFinite(raw.seed) ? raw.seed : Math.floor(Math.random()*1e9);
           } else {
             base.mode = "stripes";
-            if (wantCanvas) {
-              base.box_w_px = CW; base.box_h_px = CH;
-            } else if (wantCover) {
-              const side = Math.ceil(2 * base.win_radius_px * Math.SQRT2) + 2;
-              base.box_w_px = side; base.box_h_px = side;
-            } else {
-              base.box_w_px = raw.box_w_px ?? (ppd && raw.box_w_deg != null ? raw.box_w_deg * ppd : CW);
-              base.box_h_px = raw.box_h_px ?? (ppd && raw.box_h_deg != null ? raw.box_h_deg * ppd : CH);
-            }
+            if (wantCanvas)      { base.box_w_px = CW; base.box_h_px = CH; }
+            else if (wantCover)  { const side = Math.ceil(2 * base.win_radius_px * Math.SQRT2) + 2; base.box_w_px = side; base.box_h_px = side; }
+            else                 { base.box_w_px = raw.box_w_px ?? (raw.box_w_deg != null ? raw.box_w_deg * ppd : CW);
+                                   base.box_h_px = raw.box_h_px ?? (raw.box_h_deg != null ? raw.box_h_deg * ppd : CH); }
             base.orientation_deg = raw.orientation_deg ?? 0;
-            base.bar_w_px = raw.bar_w_px ?? (ppd && raw.bar_w_deg != null ? raw.bar_w_deg * ppd : 12);
+            base.bar_w_px = raw.bar_w_px ?? (raw.bar_w_deg != null ? raw.bar_w_deg * ppd : 12); // ≈0.2° at 60 ppd
             base.duty = clamp01(raw.duty ?? 0.5);
             base.phase_deg = raw.phase_deg ?? 0;
             base.contrast = clamp01(raw.contrast ?? 0.6);
@@ -397,7 +360,6 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
     ctx.globalAlpha = it.alpha;
     ctx.globalCompositeOperation = it.blend;
 
-    // Decide whether to draw through an offscreen mask window
     const needsBuffer = (it.kind === "texture") || (it.window && it.window !== "none");
     if (needsBuffer) {
       const bufW = Math.ceil(this.canvas.width);
@@ -411,28 +373,20 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       octx.translate(Math.round(bufW/2), Math.round(bufH/2));
       if (it.rotation_deg) octx.rotate(deg2rad(it.rotation_deg));
 
-      if (it.kind === "texture") {
-        this.drawTextureInto(octx, trial, it);
-      } else {
-        this.drawPrimitiveInto(octx, trial, it);
-      }
+      if (it.kind === "texture") this.drawTextureInto(octx, trial, it);
+      else this.drawPrimitiveInto(octx, trial, it);
+
       octx.restore();
 
-      if (it.window && it.window !== "none") {
-        this.applyWindowMask(octx, trial, it);
-      }
+      if (it.window && it.window !== "none") this.applyWindowMask(octx, trial, it);
 
       ctx.drawImage(off, -Math.round(bufW/2), -Math.round(bufH/2));
       ctx.restore();
       return;
     }
 
-    // Direct draw
-    if (it.kind === "texture") {
-      this.drawTextureInto(ctx, trial, it, true);
-    } else {
-      this.drawPrimitiveInto(ctx, trial, it);
-    }
+    if (it.kind === "texture") this.drawTextureInto(ctx, trial, it, true);
+    else this.drawPrimitiveInto(ctx, trial, it);
 
     ctx.restore();
   }
@@ -444,11 +398,8 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       ctx.beginPath();
       ctx.arc(0, 0, it.radius_px, 0, Math.PI*2);
       ctx.closePath();
-      if (it.fill !== false) {
-        ctx.fillStyle = fillStroke; ctx.fill();
-      } else {
-        ctx.lineWidth = it.stroke_px; ctx.strokeStyle = fillStroke; ctx.stroke();
-      }
+      if (it.fill !== false) { ctx.fillStyle = fillStroke; ctx.fill(); }
+      else { ctx.lineWidth = it.stroke_px; ctx.strokeStyle = fillStroke; ctx.stroke(); }
     } else if (it.kind === "triangle") {
       const s = Math.max(2, Math.round(it.side_px));
       const h = s * Math.sqrt(3) / 2;
@@ -457,11 +408,8 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       ctx.lineTo( s/2,  h/2);
       ctx.lineTo(  0 , -h/2);
       ctx.closePath();
-      if (it.fill !== false) {
-        ctx.fillStyle = fillStroke; ctx.fill();
-      } else {
-        ctx.lineWidth = it.stroke_px; ctx.strokeStyle = fillStroke; ctx.stroke();
-      }
+      if (it.fill !== false) { ctx.fillStyle = fillStroke; ctx.fill(); }
+      else { ctx.lineWidth = it.stroke_px; ctx.strokeStyle = fillStroke; ctx.stroke(); }
     } else if (it.kind === "annulus") {
       ctx.fillStyle = fillStroke;
       ctx.beginPath(); ctx.arc(0, 0, it.outer_px, 0, Math.PI*2);
@@ -481,11 +429,8 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       } else {
         path.rect(-w/2, -h/2, w, h);
       }
-      if (it.kind === "rect" && it.fill !== false) {
-        ctx.fillStyle = fillStroke; ctx.fill(path);
-      } else {
-        ctx.lineWidth = it.stroke_px; ctx.strokeStyle = fillStroke; ctx.stroke(path);
-      }
+      if (it.kind === "rect" && it.fill !== false) { ctx.fillStyle = fillStroke; ctx.fill(path); }
+      else { ctx.lineWidth = it.stroke_px; ctx.strokeStyle = fillStroke; ctx.stroke(path); }
     } else if (it.kind === "stripe") {
       ctx.fillStyle = fillStroke;
       ctx.fillRect(-it.stripe_len_px/2, -it.stripe_w_px/2, it.stripe_len_px, it.stripe_w_px);
@@ -505,7 +450,6 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
     const octx = off.getContext("2d")!;
     const img = octx.createImageData(W, H);
     const d = img.data;
-
     const mod = (n: number, m: number) => ((n % m) + m) % m;
 
     if (it.mode === "noise") {
@@ -522,10 +466,9 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       }
       octx.putImageData(img, 0, 0);
     } else {
-      // stripes (square wave) covering entire box
       const duty = clamp01(it.duty ?? 0.5);
       const barW = Math.max(1, Math.round(it.bar_w_px));
-      const phase = (it.phase_deg ?? 0) / 360; // [0..1)
+      const phase = (it.phase_deg ?? 0) / 360;
       const gamma = trial.gamma;
       const g0 = clamp01(it.gray);
       const amp = clamp01(it.contrast ?? 0.6);
@@ -535,7 +478,7 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const xn =  (x - W/2) * ct + (y - H/2) * st;
-          const t = mod(xn / barW + phase * 2, 2);     // period = 2*barW
+          const t = mod(xn / barW + phase * 2, 2); // period = 2*barW
           const isDark = t < (2 * duty);
           const vlin = clamp01(g0 + (isDark ? -amp/2 : +amp/2));
           const vg = Math.round(Math.pow(vlin, 1/gamma) * 255);
@@ -578,11 +521,8 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
           for (let x = -R; x <= R; x++) {
             const r = Math.sqrt(x*x + y*y);
             let a = 0;
-            if (it.window === "gaussian") {
-              a = Math.exp(-(r*r)/(2*sig*sig));
-            } else {
-              a = r <= R ? 0.5 * (1 + Math.cos(Math.PI * r / R)) : 0;
-            }
+            if (it.window === "gaussian") a = Math.exp(-(r*r)/(2*sig*sig));
+            else a = r <= R ? 0.5 * (1 + Math.cos(Math.PI * r / R)) : 0; // raised-cos
             const j = ((y+R) * (R*2+1) + (x+R)) * 4;
             d[j] = 255; d[j+1] = 255; d[j+2] = 255; d[j+3] = Math.round(255 * clamp01(a));
           }
@@ -608,8 +548,8 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
   private legacyToItems(trial: Trial): Item[] {
     if (!(trial as any).kind) return [];
     const k = String((trial as any).kind).toLowerCase();
-    const ppd = trial.px_per_deg ?? null;
-    const size_px = (trial as any).size_px ?? (ppd && (trial as any).size_deg != null ? (trial as any).size_deg * ppd : 80);
+    const ppd = trial.px_per_deg ?? 60;
+    const size_px = (trial as any).size_px ?? ( (trial as any).size_deg != null ? (trial as any).size_deg * ppd : 80);
     if (k === "annulus")   return [{ kind:"annulus", outer_px:size_px/2, inner_px:size_px/4 }];
     if (k === "rectframe") return [{ kind:"rectframe", width_px:size_px, height_px:size_px, stroke_px:2 }];
     if (k === "stripe")    return [{ kind:"stripe", stripe_len_px:size_px*1.5, stripe_w_px:Math.max(4, size_px*0.1) }];
@@ -641,7 +581,7 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       n_items: items.length,
       items: items.map((it: any) => ({
         kind: it.kind, z: it.z, x_px: it.x_px, y_px: it.y_px,
-        color: it.color ?? null, gray: it.gray ?? null, alpha: it.alpha, label: it.label
+        color: it.color ?? undefined, gray: it.gray ?? undefined, alpha: it.alpha, label: it.label
       })),
     };
     display_element.innerHTML = "";
