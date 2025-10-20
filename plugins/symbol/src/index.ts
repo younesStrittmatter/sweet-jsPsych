@@ -1,20 +1,23 @@
 // sb-symbol — generalized, layered visual primitives & textures for jsPsych
-// Now with sensible defaults so most trials only specify what's essential.
-// Highlights:
-// - textures default to FULL CANVAS coverage
-// - circular mask is AUTO-INFERRED when win_radius_* is provided
-// - px_per_deg defaults to 60 (override if you have a different calibration)
-// - reasonable defaults for bar width (≈0.2°), duty=0.5, contrast=0.6, gray=bg_gray
+// Now with: color fills (CSS), triangle primitive, and top-level aliases: item, color.
+// Also supports: items[] with z-order/blends; primitives (circle|annulus|rect|rectframe|stripe|cross|triangle);
+// textures (stripes|noise); mask/window (circular|rect|raisedcos|gaussian); px/deg units; keyboard/mouse.
 //
-// Minimal example:
-// { type:"symbol", items:[
-//    { kind:"texture", mode:"stripes", orientation_deg:135, win_radius_deg:2 },
-//    { kind:"annulus", inner_deg:2, outer_deg:5, gray:0.55 }
-// ], trial_duration:500 }
+// Minimal single-item example (uses aliases):
+//   { type:"symbol", item:"triangle", color:"green", trial_duration:1500, response_keys:["f","j"] }
+//
+// Full layered example (two masked stripe textures → plaid + annulus):
+//   { type:"symbol", px_per_deg:60, items:[
+//       { kind:"texture", mode:"stripes", box:"canvas", orientation_deg:45,  contrast:0.6, gray:0.5, mask:"circular", win_radius_deg:2, blend:"multiply" },
+//       { kind:"texture", mode:"stripes", box:"canvas", orientation_deg:135, contrast:0.3, gray:0.5, mask:"circular", win_radius_deg:2, blend:"multiply" },
+//       { kind:"annulus", inner_deg:2, outer_deg:3, gray:0.55, z:10 }
+//     ],
+//     trial_duration: 500
+//   }
 
 import type { JsPsych, JsPsychPlugin, TrialType } from "jspsych";
 
-// ---- ParameterType compatibility (IIFE safe) ----
+// ---- ParameterType compatibility (avoid undefined PT.COMPLEX in IIFE) ----
 const PT =
   typeof window !== "undefined" && (window as any).jsPsych
     ? ((window as any).jsPsych.plugins?.parameterType ??
@@ -38,10 +41,12 @@ type Common = {
   blend?: Blend;                  // default "source-over"
 
   // appearance
-  gray?: number;                  // 0..1 (default bg_gray)
+  // Prefer `color` (CSS string). If omitted, `gray` (0..1) is used with gamma.
+  color?: string;                 // CSS: "red", "#0f0", "rgb(200,0,0)", etc.
+  gray?: number;                  // 0..1 (default bg_gray when color not given)
   alpha?: number;                 // 0..1 (default 1)
   rotation_deg?: number;          // rotates the item
-  stroke_px?: number;             // for frames/lines
+  stroke_px?: number;             // for frames/lines/outlines
   label?: string;
 
   // optional window mask (applies to textures & filled rects/circles)
@@ -50,8 +55,8 @@ type Common = {
   mask?: WindowKind;
 
   // window sizing (px or deg)
-  win_radius_px?: number; win_radius_deg?: number;
-  win_sigma_px?: number;  win_sigma_deg?: number;
+  win_radius_px?: number; win_radius_deg?: number;   // for circular/raisedcos/gaussian
+  win_sigma_px?: number; win_sigma_deg?: number;     // for gaussian envelope
   win_rect_w_px?: number; win_rect_w_deg?: number;
   win_rect_h_px?: number; win_rect_h_deg?: number;
 
@@ -60,35 +65,68 @@ type Common = {
   box?: "canvas" | "cover-window";
 };
 
-type Circle = Common & { kind: "circle"; radius_px?: number; radius_deg?: number; fill?: boolean };
-type Annulus = Common & { kind: "annulus"; inner_px?: number; outer_px?: number; inner_deg?: number; outer_deg?: number; };
-type Rect = Common & { kind: "rect" | "rectframe"; width_px?: number; height_px?: number; width_deg?: number; height_deg?: number; corner_radius_px?: number; };
-type StripeBar = Common & { kind: "stripe"; stripe_len_px?: number; stripe_len_deg?: number; stripe_w_px?: number; stripe_w_deg?: number; };
-type Cross = Common & { kind: "cross"; arm_len_px?: number; arm_len_deg?: number; arm_w_px?: number; arm_w_deg?: number; };
+type Circle = Common & {
+  kind: "circle";
+  radius_px?: number; radius_deg?: number;
+  fill?: boolean; // default true
+};
+
+type Triangle = Common & {
+  kind: "triangle";               // equilateral; centered
+  side_px?: number; side_deg?: number;  // edge length
+  fill?: boolean; // default true
+};
+
+type Annulus = Common & {
+  kind: "annulus";
+  inner_px?: number; outer_px?: number;
+  inner_deg?: number; outer_deg?: number;
+};
+
+type Rect = Common & {
+  kind: "rect" | "rectframe";
+  width_px?: number; height_px?: number;
+  width_deg?: number; height_deg?: number;
+  corner_radius_px?: number;
+  // rectframe uses stroke; rect fills (unless fill:false for outline style)
+  fill?: boolean; // respected only for "rect"; default true
+};
+
+type StripeBar = Common & {
+  kind: "stripe";                // single solid bar (not repeating)
+  stripe_len_px?: number; stripe_len_deg?: number;
+  stripe_w_px?: number;   stripe_w_deg?: number;
+};
+
+type Cross = Common & {
+  kind: "cross";
+  arm_len_px?: number; arm_len_deg?: number;
+  arm_w_px?: number;   arm_w_deg?: number;
+};
 
 type TextureStripes = Common & {
   kind: "texture";
-  mode: "stripes";
+  mode: "stripes";               // repeating light/dark (square-wave)
   box_w_px?: number; box_w_deg?: number;
   box_h_px?: number; box_h_deg?: number;
-  orientation_deg?: number;
-  bar_w_px?: number; bar_w_deg?: number; // half-period
-  duty?: number;                          // dark fraction
-  phase_deg?: number;
-  contrast?: number;
+  orientation_deg?: number;      // stripe orientation
+  bar_w_px?: number; bar_w_deg?: number;
+  duty?: number;                 // 0..1 dark fraction; default 0.5
+  phase_deg?: number;            // along normal
+  contrast?: number;             // 0..1 amplitude around gray
 };
 
 type TextureNoise = Common & {
   kind: "texture";
-  mode: "noise";
+  mode: "noise";                 // white noise
   box_w_px?: number; box_w_deg?: number;
   box_h_px?: number; box_h_deg?: number;
-  contrast?: number;
-  seed?: number;
+  contrast?: number;             // 0..1 amplitude around gray
+  seed?: number;                 // reproducibility
 };
 
 type TextureItem = TextureStripes | TextureNoise;
-type Item = Circle | Annulus | Rect | StripeBar | Cross | TextureItem;
+type Item = Circle | Triangle | Annulus | Rect | StripeBar | Cross | TextureItem;
 
 type DataOut = {
   rt: number | null;
@@ -96,24 +134,46 @@ type DataOut = {
   offset_ms: number;
   resp_key: string | null;
   n_items: number;
-  items: Array<{ kind: string; z: number; x_px: number; y_px: number; gray: number; alpha: number; label?: string }>;
+  items: Array<{ kind: string; z: number; x_px: number; y_px: number; color?: string | null; gray?: number | null; alpha: number; label?: string }>;
 };
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const deg2rad = (d: number) => (d * Math.PI) / 180;
-function mulberry32(a: number) { return function(){ let t=(a+=0x6d2b79f5); t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; }; }
+
+function mulberry32(a: number) {
+  return function() {
+    let t = (a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Compute CSS fill/stroke: prefer item.color; else gray→gamma-corrected rgb
+function styleColor(item: any, gamma: number, bg_gray_fallback: number) {
+  if (typeof item.color === "string" && item.color.trim().length > 0) {
+    return item.color; // use CSS as-is
+  }
+  const g = clamp01((item.gray ?? bg_gray_fallback) as number);
+  const u8 = Math.round(Math.pow(g, 1 / gamma) * 255);
+  return `rgb(${u8},${u8},${u8})`;
+}
 
 const info = <const>{
   name: "symbol",
   version: "0.6.0",
   parameters: {
+    // Display / gamma
     canvas_width:   { type: PT.INT,   default: 800 },
     canvas_height:  { type: PT.INT,   default: 600 },
     bg_gray:        { type: PT.FLOAT, default: 0.5 },
-    px_per_deg:     { type: PT.FLOAT, default: 60 },   // sensible default
+    px_per_deg:     { type: PT.FLOAT, default: null as number | null },
     gamma:          { type: PT.FLOAT, default: 1.0 },
 
+    // Layered items OR single alias
     items:          { type: PT.COMPLEX, default: [] as Item[] },
+    item:           { type: PT.COMPLEX, default: null as any },       // alias: one item (string or object)
+    color:          { type: PT.STRING,  default: null as string | null }, // alias: overrides all per-item colors
 
     // Back-compat (legacy single symbol)
     kind:           { type: PT.STRING, default: null as any },
@@ -164,16 +224,18 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
     // Background
     this.fillBackground(trial.bg_gray, trial.gamma);
 
-    // Items
+    // Items (with back-compat + single-item/color aliases)
     const items = this.normalizeItems(trial);
-    items.sort((a, b) => (a.z - b.z)); // z-order
 
-    // Draw
+    // Sort by z (layering)
+    items.sort((a, b) => (a.z - b.z));
+
+    // Draw each item, respecting blend/alpha/window
     for (const it of items) this.drawItem(trial, it);
 
     // Responses
     this.startTime = performance.now();
-    if ((trial.response_keys as string[]).length > 0) {
+    if (trial.response_keys && (trial.response_keys as string[]).length > 0) {
       this.keyboardListener = this.jsPsych.pluginAPI.getKeyboardResponse({
         callback_function: (info: any) => {
           if (trial.end_on_response) this.end(display_element, trial, info.key as string, info.rt as number, items);
@@ -204,76 +266,85 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
   }
 
   private normalizeItems(trial: Trial) {
-    const ppd = trial.px_per_deg ?? 60;
-    const src: Item[] =
-      (Array.isArray(trial.items) && trial.items.length > 0)
-        ? (trial.items as Item[])
-        : this.legacyToItems(trial);
+    const ppd = trial.px_per_deg ?? null;
+    const trialColor = (trial as any).color ?? null;
+    const single = (trial as any).item;
 
-    const CW = this.canvas?.width  ?? trial.canvas_width  ?? 800;
-    const CH = this.canvas?.height ?? trial.canvas_height ?? 600;
+    // Source: explicit items[] OR single alias OR legacy
+    let src: any[] | null = null;
+    if (Array.isArray((trial as any).items) && (trial as any).items.length > 0) {
+      src = (trial as any).items as any[];
+    } else if (single != null) {
+      // string -> { kind:"..." }, object -> use directly
+      src = [ (typeof single === "string") ? { kind: single } : single ];
+    } else {
+      src = this.legacyToItems(trial);
+    }
 
-    return src.map((raw: any) => {
+    const CW = this.canvas?.width  ?? (trial.canvas_width as number)  ?? 800;
+    const CH = this.canvas?.height ?? (trial.canvas_height as number) ?? 600;
+
+    return (src as any[]).map((raw: any) => {
       const base: any = {
         kind: raw.kind as Item["kind"],
-        x_px: raw.x_px ?? (raw.x_deg != null ? raw.x_deg * ppd : 0),
-        y_px: raw.y_px ?? (raw.y_deg != null ? raw.y_deg * ppd : 0),
+        x_px: raw.x_px ?? (ppd && raw.x_deg != null ? raw.x_deg * ppd : 0),
+        y_px: raw.y_px ?? (ppd && raw.y_deg != null ? raw.y_deg * ppd : 0),
         z: (raw.z ?? 0) as number,
         blend: (raw.blend ?? "source-over") as Blend,
+        // prefer item.color else raw.gray else trial.bg_gray
+        color: (trialColor != null ? trialColor : raw.color) ?? null,
         gray: clamp01((raw.gray ?? trial.bg_gray) as number),
         alpha: clamp01((raw.alpha ?? 1) as number),
         rotation_deg: (raw.rotation_deg ?? 0) as number,
         stroke_px: (raw.stroke_px ?? 2) as number,
         label: raw.label as string | undefined,
-
-        // accept "mask" alias; default inferred from window geometry
         window: (raw.mask ?? raw.window ?? "none") as WindowKind,
         box: raw.box as ("canvas" | "cover-window" | undefined),
 
-        win_radius_px:  raw.win_radius_px ?? (raw.win_radius_deg != null ? raw.win_radius_deg * ppd : null),
-        win_sigma_px:   raw.win_sigma_px  ?? (raw.win_sigma_deg  != null ? raw.win_sigma_deg  * ppd : null),
-        win_rect_w_px:  raw.win_rect_w_px ?? (raw.win_rect_w_deg != null ? raw.win_rect_w_deg * ppd : null),
-        win_rect_h_px:  raw.win_rect_h_px ?? (raw.win_rect_h_deg != null ? raw.win_rect_h_deg * ppd : null),
+        win_radius_px:  raw.win_radius_px ?? (ppd && raw.win_radius_deg != null ? raw.win_radius_deg * ppd : null),
+        win_sigma_px:   raw.win_sigma_px  ?? (ppd && raw.win_sigma_deg  != null ? raw.win_sigma_deg  * ppd : null),
+        win_rect_w_px:  raw.win_rect_w_px ?? (ppd && raw.win_rect_w_deg != null ? raw.win_rect_w_deg * ppd : null),
+        win_rect_h_px:  raw.win_rect_h_px ?? (ppd && raw.win_rect_h_deg != null ? raw.win_rect_h_deg * ppd : null),
       };
 
-      // normalize alias
       if (base.window === "circle") base.window = "circular";
-      // infer window kind if not provided
-      if ((base.window === "none" || !base.window)) {
-        if (base.win_radius_px != null) base.window = "circular";
-        else if (base.win_rect_w_px != null || base.win_rect_h_px != null) base.window = "rect";
-      }
 
-      switch (base.kind) {
+      switch (String(base.kind || "").toLowerCase()) {
         case "circle":
-          base.radius_px = raw.radius_px ?? (raw.radius_deg != null ? raw.radius_deg * ppd : 40);
+          base.radius_px = raw.radius_px ?? (ppd && raw.radius_deg != null ? raw.radius_deg * ppd : 40);
+          base.fill = raw.fill ?? true;
+          break;
+
+        case "triangle":
+          base.side_px = raw.side_px ?? (ppd && raw.side_deg != null ? raw.side_deg * ppd : 100);
           base.fill = raw.fill ?? true;
           break;
 
         case "annulus":
-          base.inner_px = raw.inner_px ?? (raw.inner_deg != null ? raw.inner_deg * ppd : 0);
-          base.outer_px = raw.outer_px ?? (raw.outer_deg != null ? raw.outer_deg * ppd : 60);
+          base.inner_px = raw.inner_px ?? (ppd && raw.inner_deg != null ? raw.inner_deg * ppd : 0);
+          base.outer_px = raw.outer_px ?? (ppd && raw.outer_deg != null ? raw.outer_deg * ppd : 60);
           break;
 
         case "rect":
         case "rectframe":
-          base.width_px  = raw.width_px  ?? (raw.width_deg  != null ? raw.width_deg  * ppd : 120);
-          base.height_px = raw.height_px ?? (raw.height_deg != null ? raw.height_deg * ppd : 120);
+          base.width_px  = raw.width_px  ?? (ppd && raw.width_deg  != null ? raw.width_deg  * ppd : 120);
+          base.height_px = raw.height_px ?? (ppd && raw.height_deg != null ? raw.height_deg * ppd : 120);
           base.corner_radius_px = Math.max(0, raw.corner_radius_px ?? 0);
+          if (base.kind === "rect") base.fill = raw.fill ?? true;
           break;
 
         case "stripe":
-          base.stripe_len_px = raw.stripe_len_px ?? (raw.stripe_len_deg != null ? raw.stripe_len_deg * ppd : 300);
-          base.stripe_w_px   = raw.stripe_w_px   ?? (raw.stripe_w_deg   != null ? raw.stripe_w_deg   * ppd : 12);
+          base.stripe_len_px = raw.stripe_len_px ?? (ppd && raw.stripe_len_deg != null ? raw.stripe_len_deg * ppd : 300);
+          base.stripe_w_px   = raw.stripe_w_px   ?? (ppd && raw.stripe_w_deg   != null ? raw.stripe_w_deg   * ppd : 20);
           break;
 
         case "cross":
-          base.arm_len_px = raw.arm_len_px ?? (raw.arm_len_deg != null ? raw.arm_len_deg * ppd : 40);
-          base.arm_w_px   = raw.arm_w_px   ?? (raw.arm_w_deg   != null ? raw.arm_w_deg   * ppd : 6);
+          base.arm_len_px = raw.arm_len_px ?? (ppd && raw.arm_len_deg != null ? raw.arm_len_deg * ppd : 40);
+          base.arm_w_px   = raw.arm_w_px   ?? (ppd && raw.arm_w_deg   != null ? raw.arm_w_deg   * ppd : 6);
           break;
 
         case "texture": {
-          const wantCanvas = base.box === "canvas" || base.box == null; // default to canvas
+          const wantCanvas = base.box === "canvas";
           const wantCover  = base.box === "cover-window" && base.win_radius_px;
 
           if (raw.mode === "noise") {
@@ -284,8 +355,8 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
               const side = Math.ceil(2 * base.win_radius_px * Math.SQRT2) + 2;
               base.box_w_px = side; base.box_h_px = side;
             } else {
-              base.box_w_px = raw.box_w_px ?? (raw.box_w_deg != null ? raw.box_w_deg * ppd : CW);
-              base.box_h_px = raw.box_h_px ?? (raw.box_h_deg != null ? raw.box_h_deg * ppd : CH);
+              base.box_w_px = raw.box_w_px ?? (ppd && raw.box_w_deg != null ? raw.box_w_deg * ppd : CW);
+              base.box_h_px = raw.box_h_px ?? (ppd && raw.box_h_deg != null ? raw.box_h_deg * ppd : CH);
             }
             base.contrast = clamp01(raw.contrast ?? 0.5);
             base.seed = Number.isFinite(raw.seed) ? raw.seed : Math.floor(Math.random()*1e9);
@@ -297,12 +368,11 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
               const side = Math.ceil(2 * base.win_radius_px * Math.SQRT2) + 2;
               base.box_w_px = side; base.box_h_px = side;
             } else {
-              base.box_w_px = raw.box_w_px ?? (raw.box_w_deg != null ? raw.box_w_deg * ppd : CW);
-              base.box_h_px = raw.box_h_px ?? (raw.box_h_deg != null ? raw.box_h_deg * ppd : CH);
+              base.box_w_px = raw.box_w_px ?? (ppd && raw.box_w_deg != null ? raw.box_w_deg * ppd : CW);
+              base.box_h_px = raw.box_h_px ?? (ppd && raw.box_h_deg != null ? raw.box_h_deg * ppd : CH);
             }
             base.orientation_deg = raw.orientation_deg ?? 0;
-            // default ≈ 0.2° if ppd is known (here 60 → 12 px)
-            base.bar_w_px = raw.bar_w_px ?? (raw.bar_w_deg != null ? raw.bar_w_deg * ppd : Math.round(0.2 * ppd));
+            base.bar_w_px = raw.bar_w_px ?? (ppd && raw.bar_w_deg != null ? raw.bar_w_deg * ppd : 12);
             base.duty = clamp01(raw.duty ?? 0.5);
             base.phase_deg = raw.phase_deg ?? 0;
             base.contrast = clamp01(raw.contrast ?? 0.6);
@@ -311,14 +381,15 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
         }
 
         default:
-          base.kind = "circle"; base.radius_px = 40; base.fill = true;
+          base.kind = "circle";
+          base.radius_px = 40;
+          base.fill = true;
       }
       return base;
     });
   }
 
   private drawItem(trial: Trial, it: any) {
-    const v = Math.round(Math.pow(it.gray, 1 / trial.gamma) * 255);
     const ctx = this.ctx;
     ctx.save();
     ctx.translate(Math.round(this.canvas.width/2 + it.x_px), Math.round(this.canvas.height/2 + it.y_px));
@@ -326,6 +397,7 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
     ctx.globalAlpha = it.alpha;
     ctx.globalCompositeOperation = it.blend;
 
+    // Decide whether to draw through an offscreen mask window
     const needsBuffer = (it.kind === "texture") || (it.window && it.window !== "none");
     if (needsBuffer) {
       const bufW = Math.ceil(this.canvas.width);
@@ -339,49 +411,86 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       octx.translate(Math.round(bufW/2), Math.round(bufH/2));
       if (it.rotation_deg) octx.rotate(deg2rad(it.rotation_deg));
 
-      if (it.kind === "texture") this.drawTextureInto(octx, trial, it);
-      else this.drawPrimitiveInto(octx, trial, it, v);
+      if (it.kind === "texture") {
+        this.drawTextureInto(octx, trial, it);
+      } else {
+        this.drawPrimitiveInto(octx, trial, it);
+      }
       octx.restore();
 
-      if (it.window && it.window !== "none") this.applyWindowMask(octx, trial, it);
+      if (it.window && it.window !== "none") {
+        this.applyWindowMask(octx, trial, it);
+      }
+
       ctx.drawImage(off, -Math.round(bufW/2), -Math.round(bufH/2));
       ctx.restore();
       return;
     }
 
-    if (it.kind === "texture") this.drawTextureInto(ctx, trial, it, true);
-    else this.drawPrimitiveInto(ctx, trial, it, v);
+    // Direct draw
+    if (it.kind === "texture") {
+      this.drawTextureInto(ctx, trial, it, true);
+    } else {
+      this.drawPrimitiveInto(ctx, trial, it);
+    }
+
     ctx.restore();
   }
 
-  private drawPrimitiveInto(ctx: CanvasRenderingContext2D, trial: Trial, it: any, v: number) {
+  private drawPrimitiveInto(ctx: CanvasRenderingContext2D, trial: Trial, it: any) {
+    const fillStroke = styleColor(it, trial.gamma, trial.bg_gray);
+
     if (it.kind === "circle") {
-      ctx.beginPath(); ctx.arc(0,0,it.radius_px,0,Math.PI*2); ctx.closePath();
-      if (it.fill ?? true) { ctx.fillStyle = `rgb(${v},${v},${v})`; ctx.fill(); }
-      else { ctx.lineWidth = it.stroke_px; ctx.strokeStyle = `rgb(${v},${v},${v})`; ctx.stroke(); }
+      ctx.beginPath();
+      ctx.arc(0, 0, it.radius_px, 0, Math.PI*2);
+      ctx.closePath();
+      if (it.fill !== false) {
+        ctx.fillStyle = fillStroke; ctx.fill();
+      } else {
+        ctx.lineWidth = it.stroke_px; ctx.strokeStyle = fillStroke; ctx.stroke();
+      }
+    } else if (it.kind === "triangle") {
+      const s = Math.max(2, Math.round(it.side_px));
+      const h = s * Math.sqrt(3) / 2;
+      ctx.beginPath();
+      ctx.moveTo(-s/2,  h/2);
+      ctx.lineTo( s/2,  h/2);
+      ctx.lineTo(  0 , -h/2);
+      ctx.closePath();
+      if (it.fill !== false) {
+        ctx.fillStyle = fillStroke; ctx.fill();
+      } else {
+        ctx.lineWidth = it.stroke_px; ctx.strokeStyle = fillStroke; ctx.stroke();
+      }
     } else if (it.kind === "annulus") {
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.beginPath(); ctx.arc(0,0,it.outer_px,0,Math.PI*2); ctx.arc(0,0,it.inner_px,0,Math.PI*2,true);
+      ctx.fillStyle = fillStroke;
+      ctx.beginPath(); ctx.arc(0, 0, it.outer_px, 0, Math.PI*2);
+      ctx.arc(0, 0, it.inner_px, 0, Math.PI*2, true);
       ctx.closePath(); ctx.fill("evenodd");
     } else if (it.kind === "rect" || it.kind === "rectframe") {
-      const w=it.width_px,h=it.height_px,r=Math.max(0,it.corner_radius_px||0);
+      const w = it.width_px, h = it.height_px, r = Math.max(0, it.corner_radius_px || 0);
       const path = new Path2D();
-      if (r>0) {
-        const rr=Math.min(r,w/2,h/2);
-        path.moveTo(-w/2+rr,-h/2);
-        path.lineTo(w/2-rr,-h/2); path.arcTo(w/2,-h/2,w/2,-h/2+rr,rr);
-        path.lineTo(w/2,h/2-rr);  path.arcTo(w/2,h/2, w/2-rr,h/2, rr);
-        path.lineTo(-w/2+rr,h/2); path.arcTo(-w/2,h/2,-w/2,h/2-rr, rr);
-        path.lineTo(-w/2,-h/2+rr);path.arcTo(-w/2,-h/2,-w/2+rr,-h/2, rr);
+      if (r > 0) {
+        const rr = Math.min(r, w/2, h/2);
+        path.moveTo(-w/2+rr, -h/2);
+        path.lineTo(w/2-rr, -h/2); path.arcTo(w/2, -h/2, w/2, -h/2+rr, rr);
+        path.lineTo(w/2, h/2-rr);  path.arcTo(w/2, h/2,  w/2-rr, h/2, rr);
+        path.lineTo(-w/2+rr, h/2); path.arcTo(-w/2, h/2, -w/2, h/2-rr, rr);
+        path.lineTo(-w/2, -h/2+rr);path.arcTo(-w/2, -h/2, -w/2+rr, -h/2, rr);
         path.closePath();
-      } else path.rect(-w/2,-h/2,w,h);
-      if (it.kind==="rect") { ctx.fillStyle=`rgb(${v},${v},${v})`; ctx.fill(path); }
-      else { ctx.lineWidth=it.stroke_px; ctx.strokeStyle=`rgb(${v},${v},${v})`; ctx.stroke(path); }
+      } else {
+        path.rect(-w/2, -h/2, w, h);
+      }
+      if (it.kind === "rect" && it.fill !== false) {
+        ctx.fillStyle = fillStroke; ctx.fill(path);
+      } else {
+        ctx.lineWidth = it.stroke_px; ctx.strokeStyle = fillStroke; ctx.stroke(path);
+      }
     } else if (it.kind === "stripe") {
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillStyle = fillStroke;
       ctx.fillRect(-it.stripe_len_px/2, -it.stripe_w_px/2, it.stripe_len_px, it.stripe_w_px);
     } else if (it.kind === "cross") {
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillStyle = fillStroke;
       ctx.fillRect(-it.arm_w_px/2, -it.arm_len_px/2, it.arm_w_px, it.arm_len_px);
       ctx.fillRect(-it.arm_len_px/2, -it.arm_w_px/2, it.arm_len_px, it.arm_w_px);
     }
@@ -413,10 +522,10 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       }
       octx.putImageData(img, 0, 0);
     } else {
-      // stripes covering entire box
+      // stripes (square wave) covering entire box
       const duty = clamp01(it.duty ?? 0.5);
       const barW = Math.max(1, Math.round(it.bar_w_px));
-      const phase = (it.phase_deg ?? 0) / 360;
+      const phase = (it.phase_deg ?? 0) / 360; // [0..1)
       const gamma = trial.gamma;
       const g0 = clamp01(it.gray);
       const amp = clamp01(it.contrast ?? 0.6);
@@ -426,7 +535,7 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const xn =  (x - W/2) * ct + (y - H/2) * st;
-          const t = mod(xn / barW + phase * 2, 2); // period = 2*barW
+          const t = mod(xn / barW + phase * 2, 2);     // period = 2*barW
           const isDark = t < (2 * duty);
           const vlin = clamp01(g0 + (isDark ? -amp/2 : +amp/2));
           const vg = Math.round(Math.pow(vlin, 1/gamma) * 255);
@@ -469,8 +578,11 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
           for (let x = -R; x <= R; x++) {
             const r = Math.sqrt(x*x + y*y);
             let a = 0;
-            if (it.window === "gaussian")      a = Math.exp(-(r*r)/(2*sig*sig));
-            else /* raisedcos */               a = r <= R ? 0.5 * (1 + Math.cos(Math.PI * r / R)) : 0;
+            if (it.window === "gaussian") {
+              a = Math.exp(-(r*r)/(2*sig*sig));
+            } else {
+              a = r <= R ? 0.5 * (1 + Math.cos(Math.PI * r / R)) : 0;
+            }
             const j = ((y+R) * (R*2+1) + (x+R)) * 4;
             d[j] = 255; d[j+1] = 255; d[j+2] = 255; d[j+3] = Math.round(255 * clamp01(a));
           }
@@ -494,15 +606,16 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
   }
 
   private legacyToItems(trial: Trial): Item[] {
-    if (!trial.kind) return [];
-    const k = (trial.kind as string).toLowerCase();
-    const ppd = trial.px_per_deg ?? 60;
-    const size_px = trial.size_px ?? (trial.size_deg != null ? trial.size_deg * ppd : 80);
-    if (k === "annulus")    return [{ kind:"annulus", outer_px:size_px/2, inner_px:size_px/4 }];
-    if (k === "rectframe")  return [{ kind:"rectframe", width_px:size_px, height_px:size_px, stroke_px:2 }];
-    if (k === "stripe")     return [{ kind:"stripe", stripe_len_px:size_px*1.5, stripe_w_px:Math.max(4, size_px*0.1) }];
-    if (k === "rect")       return [{ kind:"rect", width_px:size_px, height_px:size_px }];
-    if (k === "cross")      return [{ kind:"cross", arm_len_px:size_px/2, arm_w_px:Math.max(4, size_px*0.08) }];
+    if (!(trial as any).kind) return [];
+    const k = String((trial as any).kind).toLowerCase();
+    const ppd = trial.px_per_deg ?? null;
+    const size_px = (trial as any).size_px ?? (ppd && (trial as any).size_deg != null ? (trial as any).size_deg * ppd : 80);
+    if (k === "annulus")   return [{ kind:"annulus", outer_px:size_px/2, inner_px:size_px/4 }];
+    if (k === "rectframe") return [{ kind:"rectframe", width_px:size_px, height_px:size_px, stroke_px:2 }];
+    if (k === "stripe")    return [{ kind:"stripe", stripe_len_px:size_px*1.5, stripe_w_px:Math.max(4, size_px*0.1) }];
+    if (k === "rect")      return [{ kind:"rect", width_px:size_px, height_px:size_px }];
+    if (k === "cross")     return [{ kind:"cross", arm_len_px:size_px/2, arm_w_px:Math.max(4, size_px*0.08) }];
+    if (k === "triangle")  return [{ kind:"triangle", side_px: size_px }];
     return [{ kind:"circle", radius_px:size_px/2 }];
   }
 
@@ -517,7 +630,7 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
     }
   }
 
-  private end(display_element: HTMLElement, _trial: Trial, key: string | null, rt_override: number | null, items: any[]) {
+  private end(display_element: HTMLElement, trial: Trial, key: string | null, rt_override: number | null, items: any[]) {
     this.clearTimersAndListeners();
     const now = performance.now();
     const data: DataOut = {
@@ -526,7 +639,10 @@ class SymbolPlugin implements JsPsychPlugin<Info> {
       offset_ms: Math.round(now),
       resp_key: key,
       n_items: items.length,
-      items: items.map((it: any) => ({ kind: it.kind, z: it.z, x_px: it.x_px, y_px: it.y_px, gray: it.gray, alpha: it.alpha, label: it.label })),
+      items: items.map((it: any) => ({
+        kind: it.kind, z: it.z, x_px: it.x_px, y_px: it.y_px,
+        color: it.color ?? null, gray: it.gray ?? null, alpha: it.alpha, label: it.label
+      })),
     };
     display_element.innerHTML = "";
     this.jsPsych.finishTrial(data);
