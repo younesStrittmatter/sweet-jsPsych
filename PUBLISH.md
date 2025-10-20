@@ -8,13 +8,13 @@ npm run build
 # 2) Bump version of the changed package (pick patch|minor|major)
 
 ```shell
-npm version patch --workspace @sweet-jspsych/plugin-rsvp
+npm version patch --workspace @sweet-jspsych/plugin-symbol
 ```
 
 # 3) Sanity check publish payload for that package (optional)
 
 ```shell
-npm pack --dry-run --workspace @sweet-jspsych/plugin-rsvp
+npm pack --dry-run --workspace @sweet-jspsych/plugin-symbol
 ```
 
 # 4) Rebuild to ensure dist carries the new version

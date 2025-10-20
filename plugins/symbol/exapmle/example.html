@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Symbol plaid (defaults-first)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="https://unpkg.com/jspsych@7.3.4"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
+  <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css"/>
+  <style>html,body{margin:0;height:100%;background:#111}</style>
+</head>
+<body>
+  <!-- Built IIFE of the plugin -->
+  <script src="../dist/index.browser.min.js"></script>
+
+  <script>
+    const jsPsych = initJsPsych({});
+    const ORI_R = 45;   // "/"
+    const ORI_L = 135;  // "\"
+    const flip = d => (d===ORI_R ? ORI_L : ORI_R);
+    const label = d => (((d%180)+180)%180) === ORI_R ? "right" : "left";
+
+    // Only specify what matters; the plugin defaults take care of the rest.
+    const R_INNER = 1.8;       // deg
+    const R_OUTER = 3.0;       // deg
+
+    const fixation = (ms=200) => ({
+      type: window.jsPsychSymbol,
+      items: [{ kind:"cross", gray:0.30 }],
+      trial_duration: ms
+    });
+
+    const placeholder = (prime_ms) => ({
+      type: window.jsPsychSymbol,
+      items: [{ kind:"annulus", inner_deg:R_INNER, outer_deg:R_OUTER, gray:0.55 }],
+      trial_duration: Math.max(0, 400 - prime_ms)
+    });
+
+    // Prime: full-field stripes (default), auto-masked by circular window because win_radius_deg is given
+    const prime = (ori_deg, ms) => ({
+      type: window.jsPsychSymbol,
+      items: [{
+        kind:"texture", mode:"stripes",
+        orientation_deg: ori_deg,
+        win_radius_deg: R_INNER,         // -> mask inferred as "circular"
+        // bar width ≈0.2°; duty=0.5; contrast=0.6; gray=bg_gray; all by default
+      }],
+      trial_duration: ms
+    });
+
+    // Target plaid: multiply the two masked stripe fields; overlay the ring
+    const plaid = (darker_deg) => {
+      const STRONG = 0.70, WEAK = 0.25;
+      return {
+        type: window.jsPsychSymbol,
+        items: [
+          { kind:"texture", mode:"stripes", orientation_deg: ORI_R, win_radius_deg: R_INNER, contrast: (darker_deg===ORI_R?STRONG:WEAK), blend:"multiply" },
+          { kind:"texture", mode:"stripes", orientation_deg: ORI_L, win_radius_deg: R_INNER, contrast: (darker_deg===ORI_L?STRONG:WEAK), blend:"multiply" },
+          { kind:"annulus", inner_deg:R_INNER, outer_deg:R_OUTER, gray:0.55, z:10 }
+        ],
+        trial_duration: 84
+      };
+    };
+
+    // Mask: noise auto-masked to same circular aperture
+    const mask = (ms) => ({
+      type: window.jsPsychSymbol,
+      items: [{ kind:"texture", mode:"noise", win_radius_deg: R_INNER, contrast: 0.85 }],
+      trial_duration: ms
+    });
+
+    // Responses (1a = left/right; 1b = same/different)
+    const respLeftRight = (darker_deg) => {
+      const correct = (label(darker_deg)==="left") ? "f" : "j";
+      return {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `<div style="color:#ddd;text-align:center;font-size:20px">
+          Which orientation was darker?<br/><br/>
+          <b>F</b> = Left-leaning ( \\ ) &nbsp;&nbsp; <b>J</b> = Right-leaning ( / )
+        </div>`,
+        choices: ["f","j"],
+        on_finish: d => { d.correct_key = correct; d.correct = (d.response===correct); }
+      };
+    };
+
+    const probeStripe = (ori_deg) => ({
+      type: window.jsPsychSymbol,
+      items: [{ kind:"stripe", stripe_len_deg: 7.0, stripe_w_deg: 0.6, rotation_deg: ori_deg, gray: 0.70 }],
+      trial_duration: 200
+    });
+
+    const respSameDiff = (isSame) => {
+      const correct = isSame ? "f" : "j";
+      return {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `<div style="color:#ddd;text-align:center;font-size:20px">
+          Is the outer gray stripe in the <b>same</b> direction as the darker set of lines?<br/><br/>
+          <b>F</b> = Same &nbsp;&nbsp; <b>J</b> = Different
+        </div>`,
+        choices: ["f","j"],
+        on_finish: d => { d.correct_key = correct; d.correct = (d.response===correct); }
+      };
+    };
+
+    // ---- Demo block (minimal params) ----
+    const PRIME_MS = 68;
+    const DARKER   = ORI_R;
+    const PRIME_CONGRUENT = true;
+    const primeOri = PRIME_CONGRUENT ? DARKER : flip(DARKER);
+    const probeSame = true;
+
+    const block = [
+      fixation(200),
+      placeholder(PRIME_MS),
+      prime(primeOri, PRIME_MS),
+      plaid(DARKER),
+      mask(200),
+      respLeftRight(DARKER),
+
+      fixation(200),
+      placeholder(PRIME_MS),
+      prime(primeOri, PRIME_MS),
+      plaid(DARKER),
+      mask(500),
+      probeStripe(probeSame ? DARKER : flip(DARKER)),
+      respSameDiff(probeSame)
+    ];
+
+    const start = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `<div style="color:#ddd;text-align:center">
+        <b>Symbol plaid (defaults-first)</b><br/><br/>
+        This demo relies on sensible defaults:<br/>
+        • px/deg = 60 • full-field textures • circular mask inferred from win_radius • bar width ≈ 0.2° • duty 0.5<br/><br/>
+        Press any key to start.
+      </div>`
+    };
+
+    jsPsych.run([start, ...block]);
+  </script>
+</body>
+</html>
